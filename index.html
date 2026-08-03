@@ -712,7 +712,6 @@
                         <div class="action-main-text">
                             <span id="actionMainTextSpan">点击图集或此处查看合集</span>
                         </div>
-                        <div class="action-sub-text">高清 2:1 画册列表 · 支持点击放大</div>
                     </div>
                     <div class="action-arrow">➔</div>
                 </div>
@@ -831,9 +830,8 @@
         function renderSwiper() {
             swiperWrapper.innerHTML = itemsData.map((item, index) => `
                 <div class="swiper-slide ${index === 0 ? 'active' : ''}" onclick="handleSlideClick(${index})">
-                    <img src="${buildImageUrl(item.img, 960, 68)}" alt="${item.title}" crossorigin="anonymous"
+                    <img src="${item.mainThumb || buildImageUrl(item.img, 960, 68)}" alt="${item.title}" crossorigin="anonymous"
                          decoding="async" fetchpriority="${index === 0 ? 'high' : 'low'}" draggable="false" />
-                    <div class="slide-hint"><span>${isDesktopMode() ? '点击切换' : '点击查看'}</span></div>
                 </div>
             `).join('');
         }
@@ -1007,7 +1005,7 @@
 
             drawerContent.innerHTML = data.gallery.map((imgUrl, galleryIndex) => `
                 <div class="ratio-2-1-item" onclick="openLightbox(${index}, ${galleryIndex})">
-                    <img src="${buildImageUrl(imgUrl, 480, 35)}" alt="${data.title} ${galleryIndex + 1}"
+                    <img src="${data.thumbnails?.[galleryIndex] || buildImageUrl(imgUrl, 480, 35)}" alt="${data.title} ${galleryIndex + 1}"
                          loading="lazy" decoding="async" fetchpriority="low" />
                 </div>
             `).join('');
@@ -1045,7 +1043,7 @@
         async function openLightbox(itemIndex, galleryIndex) {
             const source = itemsData[itemIndex].gallery[galleryIndex];
             const requestId = ++lightboxRequestId;
-            const previewUrl = buildImageUrl(source, 640, 42);
+            const previewUrl = itemsData[itemIndex].thumbnails?.[galleryIndex] || buildImageUrl(source, 640, 42);
             const targetWidth = Math.min(2400, Math.max(1200, Math.ceil(window.innerWidth * window.devicePixelRatio)));
             const fullUrl = buildImageUrl(source, targetWidth, 82);
 
