@@ -856,6 +856,9 @@
         let lightboxBlobUrl = null;
         let lightboxAbortController = null;
 
+        // 为手机侧滑返回建立页面内层级：主页 → 画册抽屉 → 图片大图。
+        history.replaceState({ ...(history.state || {}), galleryView: 'base' }, '', location.href);
+
         // DOM 元素
         const appContainer = document.getElementById('appContainer');
         const navTabs = document.getElementById('navTabs');
@@ -1101,6 +1104,9 @@
             if (isDesktopMode()) return; // PC端无需弹窗抽屉，右侧已固定展示
             renderDrawerContent(index);
             modalOverlay.classList.add('open');
+            if (history.state?.galleryView !== 'drawer') {
+                history.pushState({ galleryView: 'drawer', itemIndex: index }, '', location.href);
+            }
         }
 
         function renderDrawerContent(index) {
@@ -1132,15 +1138,19 @@
             }
         }
 
-        function closeDrawerFunc() {
+        function closeDrawerFunc(fromHistory = false) {
             if (!isDesktopMode()) {
+                if (!fromHistory && history.state?.galleryView === 'drawer') {
+                    history.back();
+                    return;
+                }
                 modalOverlay.classList.remove('open');
             }
         }
 
-        modalOverlay.addEventListener('click', closeDrawerFunc);
+        modalOverlay.addEventListener('click', () => closeDrawerFunc());
         if (closeDrawer) {
-            closeDrawer.addEventListener('click', closeDrawerFunc);
+            closeDrawer.addEventListener('click', () => closeDrawerFunc());
         }
 
         /* 放大预览 Lightbox 逻辑及鼠标滚动整体容器缩放 */
@@ -1184,6 +1194,9 @@
             lightboxOverlay.classList.add('open');
             lightboxOverlay.classList.add('is-loading');
             lightboxOverlay.dataset.progress = '高清图片加载中 0%';
+            if (!isDesktopMode() && history.state?.galleryView !== 'lightbox') {
+                history.pushState({ galleryView: 'lightbox', itemIndex, galleryIndex }, '', location.href);
+            }
             currentScale = 1; // 重置缩放比例
             currentTranslateX = 0;
             currentTranslateY = 0;
@@ -1219,7 +1232,11 @@
             }
         }
 
-        function closeLightboxFunc() {
+        function closeLightboxFunc(fromHistory = false) {
+            if (!fromHistory && !isDesktopMode() && history.state?.galleryView === 'lightbox') {
+                history.back();
+                return;
+            }
             lightboxRequestId++;
             if (lightboxAbortController) lightboxAbortController.abort();
             lightboxAbortController = null;
@@ -1231,6 +1248,24 @@
                 lightboxBlobUrl = null;
             }
         }
+
+        window.addEventListener('popstate', (event) => {
+            const view = event.state?.galleryView || 'base';
+
+            if (view !== 'lightbox' && lightboxOverlay.classList.contains('open')) {
+                closeLightboxFunc(true);
+            }
+
+            if (view === 'base') {
+                closeDrawerFunc(true);
+            } else if (view === 'drawer' && !isDesktopMode()) {
+                const itemIndex = Number.isInteger(event.state?.itemIndex)
+                    ? event.state.itemIndex
+                    : currentIndex;
+                renderDrawerContent(itemIndex);
+                modalOverlay.classList.add('open');
+            }
+        });
 
         function updateLightboxTransform() {
             if (currentScale <= 1) {
