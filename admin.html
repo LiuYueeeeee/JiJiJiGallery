@@ -83,9 +83,11 @@
         .draft-dot { width: 7px; height: 7px; border-radius: 50%; background: #f0bd67; box-shadow: 0 0 8px rgba(240,189,103,.45); }
         .gallery-tools { display: flex; align-items: center; gap: 10px; }
         .delete-toggle.active { color: #fff; background: rgba(207,62,62,.82); border-color: rgba(255,120,120,.7); }
-        .delete-cover { display: none; position: absolute; inset: 8px 8px 48px; border: 0; border-radius: 7px; background: rgba(143,15,24,.68); color: #fff; font-size: 54px; line-height: 1; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
-        .file-list.delete-mode .file-item:not(.main-item) .delete-cover { display: flex; }
-        .file-list.delete-mode .file-item:not(.main-item) { border-color: rgba(255,90,90,.55); }
+        .delete-cover { display: none; position: absolute; inset: 8px 8px 48px; border-radius: 7px; background: rgba(143,15,24,.68); color: #fff; font-size: 54px; line-height: 1; align-items: center; justify-content: center; backdrop-filter: blur(2px); pointer-events: none; }
+        .file-list.delete-mode .file-item:not(.main-item) { cursor: pointer; }
+        .file-list.delete-mode .file-item:not(.main-item):hover { border-color: rgba(255,90,90,.55); }
+        .file-list.delete-mode .file-item.marked-delete { border-color: rgba(255,90,90,.8); }
+        .file-list.delete-mode .file-item.marked-delete .delete-cover { display: flex; }
         .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
         .notice { border: 1px solid rgba(255,194,102,.22); background: rgba(255,194,102,.06); color: #d9c29f; border-radius: 12px; padding: 12px 14px; font-size: 12px; line-height: 1.7; margin-bottom: 18px; }
         .github-panel { margin-top: 24px; padding: 18px; border: 1px solid rgba(116,185,178,.22); border-radius: 14px; background: rgba(116,185,178,.045); }
@@ -179,8 +181,6 @@
                     <div class="status" id="status"></div>
                     <div class="actions">
                         <button class="button primary" id="saveCurrent">保存标题正文并上传图片</button>
-                        <button class="button" id="refreshCurrent">刷新当前组缩略图</button>
-                        <button class="button" id="refreshAll">刷新全部 A–F</button>
                     </div>
 
                     <section class="github-panel">
@@ -209,7 +209,8 @@
                             </div>
                         </div>
                         <div class="github-actions">
-                            <button class="button primary" id="uploadGithub">上传并创建提交</button>
+                            <button class="button" id="refreshAll">刷新缩略图</button>
+                            <button class="button primary" id="uploadGithub">上传本地数据到云端</button>
                             <button class="button danger" id="restoreGithub">从云端恢复到本地</button>
                             <span class="github-help"><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">创建访问令牌</a></span>
                         </div>
@@ -233,6 +234,7 @@
         const drafts = {};
         let previewUrls = [];
         let deleteMode = false;
+        const pendingDeletes = new Set();
 
         const $ = (selector) => document.querySelector(selector);
         const chooseFolder = $('#chooseFolder');
@@ -447,9 +449,9 @@
                     <img class="file-thumb" src="${previewUrl}" alt="${escapeHtml(image.name)}">
                     <strong title="${escapeHtml(image.name)}">${escapeHtml(image.name)}</strong>
                     <span>${isMain ? '轮播主图 / 画册首图（不可删除）' : '画册图片'}</span>
-                    ${isMain ? '' : `<button class="delete-cover" type="button" aria-label="删除 ${escapeHtml(image.name)}">&times;</button>`}
+                    ${isMain ? '' : '<div class="delete-cover" aria-hidden="true">&times;</div>'}
                 `;
-                if (!isMain) card.querySelector('.delete-cover').addEventListener('click', () => deleteGalleryImage(image.name));
+                if (!isMain) card.addEventListener('click', () => toggleDeleteMark(image.name, card));
                 fileList.appendChild(card);
             }
         }
@@ -460,28 +462,53 @@
 
         function setDeleteMode(enabled) {
             deleteMode = enabled;
+            if (!enabled) pendingDeletes.clear();
             fileList.classList.toggle('delete-mode', enabled);
+            if (!enabled) fileList.querySelectorAll('.marked-delete').forEach((card) => card.classList.remove('marked-delete'));
             const button = $('#deleteToggle');
             button.classList.toggle('active', enabled);
-            button.textContent = enabled ? '退出删除模式' : '进入删除模式';
+            button.textContent = enabled ? `确认删除（${pendingDeletes.size}）` : '进入删除模式';
         }
 
-        async function deleteGalleryImage(name) {
+        function toggleDeleteMark(name, card) {
             if (!deleteMode || name.toLowerCase() === 'main.jpg') return;
-            if (!confirm(`确定删除 ${currentGroup}/${name}？此操作会删除本地图片和对应缩略图。`)) return;
+            if (pendingDeletes.has(name)) {
+                pendingDeletes.delete(name);
+                card.classList.remove('marked-delete');
+            } else {
+                pendingDeletes.add(name);
+                card.classList.add('marked-delete');
+            }
+            $('#deleteToggle').textContent = `确认删除（${pendingDeletes.size}）`;
+        }
+
+        async function confirmPendingDeletes() {
+            if (!deleteMode) {
+                setDeleteMode(true);
+                return;
+            }
+            if (!pendingDeletes.size) {
+                setDeleteMode(false);
+                setStatus('未选择图片，已退出删除模式。');
+                return;
+            }
+            const names = Array.from(pendingDeletes);
+            if (!confirm(`确定删除已标记的 ${names.length} 张图片？此操作会删除本地原图和对应缩略图。`)) return;
             setBusy(true);
-            setStatus(`正在删除 ${name}…`);
+            setStatus(`正在删除 ${names.length} 张图片…`);
             try {
                 const directory = await getGroupDirectory(currentGroup);
-                await directory.removeEntry(name);
-                try {
-                    const thumbDirectory = await directory.getDirectoryHandle('_thumbs');
-                    await thumbDirectory.removeEntry(`${name}.jpg`);
-                } catch (_) {}
+                for (const name of names) {
+                    await directory.removeEntry(name);
+                    try {
+                        const thumbDirectory = await directory.getDirectoryHandle('_thumbs');
+                        await thumbDirectory.removeEntry(`${name}.jpg`);
+                    } catch (_) {}
+                }
                 await rebuildGroup(currentGroup);
                 await writeJson();
                 await loadGroup();
-                setStatus(`${name} 已删除。上传到 GitHub 后远程文件也会同步删除。`, 'success');
+                setStatus(`${names.length} 张图片已删除。上传到 GitHub 后远程文件也会同步删除。`, 'success');
             } catch (error) {
                 setStatus(`删除失败：${error.message}`, 'error');
             } finally {
@@ -840,7 +867,7 @@
             renderTabs();
         });
 
-        $('#deleteToggle').addEventListener('click', () => setDeleteMode(!deleteMode));
+        $('#deleteToggle').addEventListener('click', confirmPendingDeletes);
 
         $('#reloadGroup').addEventListener('click', async () => {
             if (drafts[currentGroup] && !confirm(`将放弃 ${currentGroup} 组尚未保存的修改，是否继续？`)) return;
@@ -867,21 +894,6 @@
                 setStatus('保存成功。请将本地变更推送到 GitHub。', 'success');
             } catch (error) {
                 setStatus(`保存失败：${error.message}`, 'error');
-            } finally {
-                setBusy(false);
-            }
-        });
-
-        $('#refreshCurrent').addEventListener('click', async () => {
-            setBusy(true);
-            setStatus(`正在刷新 ${currentGroup} 组缩略图…`);
-            try {
-                await rebuildGroup(currentGroup);
-                await writeJson();
-                await loadGroup();
-                setStatus(`${currentGroup} 组缩略图已刷新。`, 'success');
-            } catch (error) {
-                setStatus(`刷新失败：${error.message}`, 'error');
             } finally {
                 setBusy(false);
             }
