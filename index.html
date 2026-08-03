@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>客单展示</title>
+    <title>七安-画册展示</title>
+    <link rel="icon" type="image/png" href="./icon.png">
+    <link rel="apple-touch-icon" href="./icon.png">
     <style>
         * {
             box-sizing: border-box;
@@ -574,6 +576,26 @@
             max-height: none;
             object-fit: contain;
         }
+
+        /* 竖屏时铺满整个视口，避免宽屏手机两侧露出黑色背景 */
+        @media (orientation: portrait) and (max-width: 899px) {
+            html,
+            body {
+                width: 100%;
+                min-width: 100%;
+                background: #10191e;
+            }
+
+            .app-container {
+                width: 100vw;
+                max-width: none;
+                height: 100vh;
+                height: 100dvh;
+                max-height: none;
+                border-radius: 0;
+            }
+        }
+
         @media (min-width: 900px) and (min-height: 600px) {
             body {
                 background: #06090c;
@@ -750,7 +772,7 @@
         <div class="desktop-left-pane">
             <!-- 顶部标题栏 -->
             <div class="header">
-                <div class="header-title">客单展示</div>
+                <div class="header-title">画册展示</div>
             </div>
 
             <!-- A-F 导航标签 -->
@@ -820,6 +842,8 @@
 
         let currentIndex = 0;
         let currentScale = 1; // 记录当前缩放倍数
+        let currentTranslateX = 0;
+        let currentTranslateY = 0;
         let lightboxRequestId = 0;
         let lightboxBlobUrl = null;
         let lightboxAbortController = null;
@@ -1153,6 +1177,8 @@
             lightboxOverlay.classList.add('is-loading');
             lightboxOverlay.dataset.progress = '高清图片加载中 0%';
             currentScale = 1; // 重置缩放比例
+            currentTranslateX = 0;
+            currentTranslateY = 0;
             updateLightboxTransform();
 
             if (lightboxAbortController) lightboxAbortController.abort();
@@ -1199,12 +1225,26 @@
         }
 
         function updateLightboxTransform() {
-            lightboxContainer.style.transform = `scale(${currentScale})`;
+            if (currentScale <= 1) {
+                currentTranslateX = 0;
+                currentTranslateY = 0;
+            } else {
+                const maxX = lightboxContainer.clientWidth * (currentScale - 1) / 2;
+                const maxY = lightboxContainer.clientHeight * (currentScale - 1) / 2;
+                currentTranslateX = Math.max(-maxX, Math.min(maxX, currentTranslateX));
+                currentTranslateY = Math.max(-maxY, Math.min(maxY, currentTranslateY));
+            }
+            lightboxContainer.style.transform = `translate3d(${currentTranslateX}px, ${currentTranslateY}px, 0) scale(${currentScale})`;
         }
 
         function bindLightboxZoomEvents() {
             let pinchStartDistance = 0;
             let pinchStartScale = 1;
+            let panActive = false;
+            let panStartX = 0;
+            let panStartY = 0;
+            let panStartTranslateX = 0;
+            let panStartTranslateY = 0;
             const touchDistance = (touches) => Math.hypot(
                 touches[0].clientX - touches[1].clientX,
                 touches[0].clientY - touches[1].clientY
@@ -1223,26 +1263,51 @@
 
             // 手机竖屏双指捏合缩放
             lightboxOverlay.addEventListener('touchstart', (e) => {
-                if (e.touches.length !== 2) return;
-                e.preventDefault();
-                pinchStartDistance = touchDistance(e.touches);
-                pinchStartScale = currentScale;
+                if (e.touches.length === 2) {
+                    e.preventDefault();
+                    panActive = false;
+                    pinchStartDistance = touchDistance(e.touches);
+                    pinchStartScale = currentScale;
+                } else if (e.touches.length === 1 && currentScale > 1) {
+                    e.preventDefault();
+                    panActive = true;
+                    panStartX = e.touches[0].clientX;
+                    panStartY = e.touches[0].clientY;
+                    panStartTranslateX = currentTranslateX;
+                    panStartTranslateY = currentTranslateY;
+                }
             }, { passive: false });
 
             lightboxOverlay.addEventListener('touchmove', (e) => {
-                if (e.touches.length !== 2 || !pinchStartDistance) return;
-                e.preventDefault();
-                const ratio = touchDistance(e.touches) / pinchStartDistance;
-                currentScale = Math.min(4, Math.max(0.5, pinchStartScale * ratio));
-                updateLightboxTransform();
+                if (e.touches.length === 2 && pinchStartDistance) {
+                    e.preventDefault();
+                    const ratio = touchDistance(e.touches) / pinchStartDistance;
+                    currentScale = Math.min(4, Math.max(0.5, pinchStartScale * ratio));
+                    updateLightboxTransform();
+                } else if (e.touches.length === 1 && panActive && currentScale > 1) {
+                    e.preventDefault();
+                    currentTranslateX = panStartTranslateX + e.touches[0].clientX - panStartX;
+                    currentTranslateY = panStartTranslateY + e.touches[0].clientY - panStartY;
+                    updateLightboxTransform();
+                }
             }, { passive: false });
 
             lightboxOverlay.addEventListener('touchend', (e) => {
                 if (e.touches.length < 2) pinchStartDistance = 0;
+                if (e.touches.length === 1 && currentScale > 1) {
+                    panActive = true;
+                    panStartX = e.touches[0].clientX;
+                    panStartY = e.touches[0].clientY;
+                    panStartTranslateX = currentTranslateX;
+                    panStartTranslateY = currentTranslateY;
+                } else if (e.touches.length === 0) {
+                    panActive = false;
+                }
             }, { passive: true });
 
             lightboxOverlay.addEventListener('touchcancel', () => {
                 pinchStartDistance = 0;
+                panActive = false;
             }, { passive: true });
         }
 
