@@ -639,39 +639,69 @@
             return true;
         }
 
+        async function gitBlobSha(content) {
+            const bytes = new Uint8Array(content);
+            const header = new TextEncoder().encode(`blob ${bytes.byteLength}\0`);
+            const gitObject = new Uint8Array(header.length + bytes.length);
+            gitObject.set(header);
+            gitObject.set(bytes, header.length);
+            const digest = new Uint8Array(await crypto.subtle.digest('SHA-1', gitObject));
+            return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+        }
+
         async function uploadDirectoryToGithub() {
             await ensureRootPermission();
             saveDraft(currentGroup);
             if (Object.keys(drafts).length) throw new Error('仍有未保存的 A–F 内容修改，请先分别保存后再上传 GitHub');
-            const owner = $('#githubOwner').value.trim();
-            const repo = $('#githubRepo').value.trim();
-            const branch = $('#githubBranch').value.trim() || 'main';
-            const token = $('#githubToken').value.trim();
-            const pathPrefix = $('#githubPath').value.trim().replace(/^\/+|\/+$/g, '');
-            if (!owner || !repo || !token) throw new Error('请填写 GitHub 用户名、仓库名称和访问令牌');
-
-            setStatus('正在读取本地网站文件…');
-            const files = await collectFiles(rootHandle);
-            if (!files.length) throw new Error('所选文件夹中没有可上传文件');
-            if (!confirm(`即将把 ${files.length} 个文件提交到 ${owner}/${repo} 的 ${branch} 分支，是否继续？`)) return false;
-
+            const { owner, repo, branch, token, pathPrefix } = readGithubConfig();
             const encodedOwner = encodeURIComponent(owner);
             const encodedRepo = encodeURIComponent(repo);
             const encodedBranch = encodeURIComponent(branch);
+
+            setStatus('正在读取 GitHub 文件树…');
+            const files = await collectFiles(rootHandle);
+            if (!files.length) throw new Error('所选文件夹中没有可上传文件');
             const ref = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/ref/heads/${encodedBranch}`, token);
             const parentSha = ref.object.sha;
             const commit = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/commits/${parentSha}`, token);
-            const treeItems = [];
+            const remoteTree = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/trees/${commit.tree.sha}?recursive=1`, token);
+            if (remoteTree.truncated) throw new Error('GitHub 返回的文件清单不完整，已停止上传');
+            const remoteMap = new Map((remoteTree.tree || []).filter((item) => item.type === 'blob').map((item) => [item.path, item.sha]));
+            const localPaths = new Set();
+            const changedFiles = [];
 
+            // 使用与 Git 相同的 blob SHA-1 比较内容，不依赖修改时间或文件名。
             for (let index = 0; index < files.length; index++) {
                 const entry = files[index];
-                setStatus(`正在上传 ${index + 1}/${files.length}：${entry.path}`);
-                let file;
+                const remotePath = pathPrefix ? `${pathPrefix}/${entry.path}` : entry.path;
+                localPaths.add(remotePath);
+                setStatus(`正在比对 ${index + 1}/${files.length}：${entry.path}`);
+                try {
+                    const file = await entry.handle.getFile();
+                    if (file.size > 90 * 1024 * 1024) throw new Error('文件超过 90MB');
+                    const sha = await gitBlobSha(await file.arrayBuffer());
+                    if (remoteMap.get(remotePath) !== sha) changedFiles.push({ ...entry, remotePath });
+                } catch (error) {
+                    throw new Error(`无法读取本地文件“${entry.path}”：${error.message}`);
+                }
+            }
+
+            const managedPrefixes = GROUPS.map((id) => pathPrefix ? `${pathPrefix}/${id}/` : `${id}/`);
+            const deletedPaths = (remoteTree.tree || [])
+                .filter((item) => item.type === 'blob' && managedPrefixes.some((prefix) => item.path.startsWith(prefix)) && !localPaths.has(item.path))
+                .map((item) => item.path);
+
+            if (!changedFiles.length && !deletedPaths.length) return 'unchanged';
+            const message = `比对完成：${files.length - changedFiles.length} 个未变化，${changedFiles.length} 个需要上传，${deletedPaths.length} 个远程文件需要删除。\n确定提交到 ${owner}/${repo} 的 ${branch} 分支吗？`;
+            if (!confirm(message)) return false;
+
+            const treeItems = deletedPaths.map((path) => ({ path, mode: '100644', type: 'blob', sha: null }));
+            for (let index = 0; index < changedFiles.length; index++) {
+                const entry = changedFiles[index];
+                setStatus(`正在上传变化文件 ${index + 1}/${changedFiles.length}：${entry.path}`);
                 let content;
                 try {
-                    file = await entry.handle.getFile();
-                    if (file.size > 90 * 1024 * 1024) throw new Error('文件超过 90MB');
-                    content = await file.arrayBuffer();
+                    content = await (await entry.handle.getFile()).arrayBuffer();
                 } catch (error) {
                     throw new Error(`无法读取本地文件“${entry.path}”：${error.message}`);
                 }
@@ -679,37 +709,17 @@
                     method: 'POST',
                     body: JSON.stringify({ content: bytesToBase64(content), encoding: 'base64' })
                 });
-                treeItems.push({
-                    path: pathPrefix ? `${pathPrefix}/${entry.path}` : entry.path,
-                    mode: '100644',
-                    type: 'blob',
-                    sha: blob.sha
-                });
+                treeItems.push({ path: entry.remotePath, mode: '100644', type: 'blob', sha: blob.sha });
             }
 
-            // 同步删除 A-F 中本地已经移除的远程图片与缩略图，其他仓库文件不受影响。
-            const remoteTree = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/trees/${commit.tree.sha}?recursive=1`, token);
-            const localPaths = new Set(treeItems.map((item) => item.path));
-            const managedPrefixes = GROUPS.map((id) => pathPrefix ? `${pathPrefix}/${id}/` : `${id}/`);
-            for (const remoteItem of remoteTree.tree || []) {
-                const managed = remoteItem.type === 'blob' && managedPrefixes.some((prefix) => remoteItem.path.startsWith(prefix));
-                if (managed && !localPaths.has(remoteItem.path)) {
-                    treeItems.push({ path: remoteItem.path, mode: '100644', type: 'blob', sha: null });
-                }
-            }
-
-            setStatus('正在创建 GitHub 提交…');
+            setStatus('正在创建 GitHub 增量提交…');
             const tree = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/trees`, token, {
                 method: 'POST',
                 body: JSON.stringify({ base_tree: commit.tree.sha, tree: treeItems })
             });
             const newCommit = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/commits`, token, {
                 method: 'POST',
-                body: JSON.stringify({
-                    message: `Update gallery content ${new Date().toISOString()}`,
-                    tree: tree.sha,
-                    parents: [parentSha]
-                })
+                body: JSON.stringify({ message: `Update gallery content ${new Date().toISOString()}`, tree: tree.sha, parents: [parentSha] })
             });
             await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/refs/heads/${encodedBranch}`, token, {
                 method: 'PATCH',
@@ -898,7 +908,8 @@
             setBusy(true);
             try {
                 const uploaded = await uploadDirectoryToGithub();
-                if (uploaded) setStatus('GitHub 上传成功，Pages 将在稍后自动部署。', 'success');
+                if (uploaded === 'unchanged') setStatus('本地与 GitHub 内容一致，无需上传。', 'success');
+                else if (uploaded) setStatus('GitHub 增量上传成功，Pages 将在稍后自动部署。', 'success');
                 else setStatus('已取消上传。');
             } catch (error) {
                 setStatus(`上传失败：${error.message}`, 'error');
