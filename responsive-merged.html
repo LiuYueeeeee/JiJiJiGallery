@@ -530,9 +530,9 @@
         }
 
         .lightbox-close {
-            position: absolute;
-            top: 20px;
-            right: 20px;
+            position: fixed;
+            top: calc(16px + env(safe-area-inset-top, 0px));
+            right: calc(16px + env(safe-area-inset-right, 0px));
             color: #ffffff;
             font-size: 24px;
             cursor: pointer;
@@ -543,9 +543,10 @@
             justify-content: center;
             background: rgba(255, 255, 255, 0.12);
             border-radius: 50%;
-            z-index: 1000;
+            z-index: 2147483647;
             pointer-events: auto;
             isolation: isolate;
+            touch-action: manipulation;
         }
     
 
@@ -1263,6 +1264,10 @@
 
             // 手机竖屏双指捏合缩放
             lightboxOverlay.addEventListener('touchstart', (e) => {
+                if (e.target.closest('.lightbox-close')) {
+                    panActive = false;
+                    return;
+                }
                 if (e.touches.length === 2) {
                     e.preventDefault();
                     panActive = false;
@@ -1279,6 +1284,7 @@
             }, { passive: false });
 
             lightboxOverlay.addEventListener('touchmove', (e) => {
+                if (e.target.closest('.lightbox-close')) return;
                 if (e.touches.length === 2 && pinchStartDistance) {
                     e.preventDefault();
                     const ratio = touchDistance(e.touches) / pinchStartDistance;
@@ -1317,7 +1323,15 @@
                 closeLightboxFunc();
             }
         });
-        closeLightbox.addEventListener('click', closeLightboxFunc);
+        closeLightbox.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeLightboxFunc();
+        });
+        closeLightbox.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeLightboxFunc();
+        }, { passive: false });
 
         init();
     </script>
