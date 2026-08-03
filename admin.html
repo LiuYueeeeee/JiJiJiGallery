@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画册内容管理</title>
+    <style>
+        * { box-sizing: border-box; }
+        :root {
+            color-scheme: dark;
+            --bg: #091014;
+            --panel: #111a20;
+            --line: rgba(255,255,255,.09);
+            --text: #e8eef2;
+            --muted: #8ba0ad;
+            --accent: #74b9b2;
+            --danger: #e17b7b;
+        }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: radial-gradient(circle at 15% 0%, #183039, var(--bg) 45%);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+        button, input, textarea { font: inherit; }
+        button { cursor: pointer; }
+        .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 30px 0 50px; }
+        .topbar { display: flex; gap: 18px; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+        .topbar h1 { margin: 0 0 5px; font-size: 23px; font-weight: 500; letter-spacing: 2px; }
+        .topbar p { margin: 0; color: var(--muted); font-size: 13px; }
+        .button {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px 16px;
+            background: rgba(255,255,255,.05);
+            color: var(--text);
+        }
+        .button:hover { border-color: rgba(116,185,178,.55); }
+        .button.primary { background: var(--accent); border-color: var(--accent); color: #071110; font-weight: 600; }
+        .button.danger { color: #ffd7d7; border-color: rgba(225,123,123,.4); }
+        .button:disabled { opacity: .42; cursor: not-allowed; }
+        .workspace { display: grid; grid-template-columns: 190px minmax(0,1fr); gap: 18px; }
+        .sidebar, .panel { background: rgba(17,26,32,.92); border: 1px solid var(--line); border-radius: 16px; }
+        .sidebar { padding: 12px; height: fit-content; }
+        .group-tab {
+            width: 100%; display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 13px; border: 0; border-radius: 10px; background: transparent; color: var(--muted);
+            margin-bottom: 4px;
+        }
+        .group-tab.active { background: rgba(116,185,178,.14); color: #fff; }
+        .group-tab b { font-family: Georgia, serif; color: var(--accent); font-size: 18px; }
+        .panel { padding: 24px; min-height: 570px; }
+        .empty { min-height: 480px; display: grid; place-items: center; color: var(--muted); text-align: center; line-height: 1.8; }
+        .editor[hidden], .workspace[hidden] { display: none; }
+        .editor-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+        .editor-head h2 { margin: 0; font-size: 20px; font-weight: 500; }
+        .status { min-height: 20px; color: var(--muted); font-size: 13px; margin: 12px 0; }
+        .status.success { color: var(--accent); }
+        .status.error { color: #ff9f9f; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+        .field { display: flex; flex-direction: column; gap: 8px; }
+        .field.full { grid-column: 1 / -1; }
+        label { color: #cbd7dd; font-size: 13px; }
+        input[type="text"], textarea {
+            width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #0c1419;
+            color: var(--text); padding: 11px 12px; outline: none;
+        }
+        textarea { min-height: 108px; resize: vertical; line-height: 1.65; }
+        input:focus, textarea:focus { border-color: rgba(116,185,178,.65); }
+        .upload-box { border: 1px dashed rgba(116,185,178,.35); border-radius: 12px; padding: 16px; background: rgba(116,185,178,.04); }
+        .upload-box p { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+        input[type="file"] { width: 100%; color: var(--muted); font-size: 13px; }
+        .gallery-head { display: flex; align-items: center; justify-content: space-between; margin-top: 24px; }
+        .gallery-head h3 { margin: 0; font-size: 15px; font-weight: 500; }
+        .gallery-count { color: var(--muted); font-size: 12px; }
+        .file-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+        .file-item { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #0c1419; }
+        .file-item strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 400; }
+        .file-item span { display: block; color: var(--muted); font-size: 11px; margin-top: 5px; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+        .notice { border: 1px solid rgba(255,194,102,.22); background: rgba(255,194,102,.06); color: #d9c29f; border-radius: 12px; padding: 12px 14px; font-size: 12px; line-height: 1.7; margin-bottom: 18px; }
+        @media (max-width: 760px) {
+            .shell { width: min(100% - 20px, 720px); padding-top: 18px; }
+            .topbar { align-items: flex-start; flex-direction: column; }
+            .workspace { grid-template-columns: 1fr; }
+            .sidebar { display: grid; grid-template-columns: repeat(6, 1fr); padding: 7px; }
+            .group-tab { justify-content: center; padding: 10px 4px; }
+            .group-tab span { display: none; }
+            .panel { padding: 17px; }
+            .form-grid { grid-template-columns: 1fr; }
+            .field.full { grid-column: auto; }
+            .file-list { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <header class="topbar">
+            <div>
+                <h1>画册内容管理</h1>
+                <p>管理 A–F 标题、正文、图片清单与缩略图</p>
+            </div>
+            <button class="button primary" id="chooseFolder">选择网站文件夹</button>
+        </header>
+
+        <div class="notice">
+            请选择包含 index.html 与 gallery-data.json 的本地网站文件夹。修改会写入本地文件；完成后仍需将变更推送或上传到 GitHub。
+        </div>
+
+        <section class="panel empty" id="welcome">
+            <div>尚未连接网站文件夹<br>请使用 Chrome 或 Edge 点击“选择网站文件夹”</div>
+        </section>
+
+        <section class="workspace" id="workspace" hidden>
+            <nav class="sidebar" id="groupTabs"></nav>
+            <div class="panel">
+                <div class="editor" id="editor">
+                    <div class="editor-head">
+                        <h2><span id="groupId">A</span> 组内容</h2>
+                        <button class="button" id="reloadGroup">重新读取</button>
+                    </div>
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="titleInput">标题</label>
+                            <input id="titleInput" type="text" maxlength="100">
+                        </div>
+                        <div class="field">
+                            <label>当前主图</label>
+                            <input id="mainPath" type="text" value="Main.jpg" disabled>
+                        </div>
+                        <div class="field full">
+                            <label for="descInput">正文</label>
+                            <textarea id="descInput" maxlength="1000"></textarea>
+                        </div>
+                        <div class="field upload-box">
+                            <label for="mainFile">替换主图</label>
+                            <p>选择图片后将保存为 Main.jpg，同时覆盖原主图。</p>
+                            <input id="mainFile" type="file" accept="image/*">
+                        </div>
+                        <div class="field upload-box">
+                            <label for="galleryFiles">添加画册图片</label>
+                            <p>可多选；同名文件会被覆盖，Main.jpg 请使用左侧入口替换。</p>
+                            <input id="galleryFiles" type="file" accept="image/*" multiple>
+                        </div>
+                    </div>
+
+                    <div class="gallery-head">
+                        <h3>文件夹中的图片</h3>
+                        <span class="gallery-count" id="galleryCount">0 张</span>
+                    </div>
+                    <div class="file-list" id="fileList"></div>
+
+                    <div class="status" id="status"></div>
+                    <div class="actions">
+                        <button class="button primary" id="saveCurrent">保存标题正文并上传图片</button>
+                        <button class="button" id="refreshCurrent">刷新当前组缩略图</button>
+                        <button class="button" id="refreshAll">刷新全部 A–F</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F'];
+        const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp'];
+        let rootHandle = null;
+        let data = [];
+        let currentGroup = 'A';
+
+        const $ = (selector) => document.querySelector(selector);
+        const chooseFolder = $('#chooseFolder');
+        const welcome = $('#welcome');
+        const workspace = $('#workspace');
+        const groupTabs = $('#groupTabs');
+        const groupId = $('#groupId');
+        const titleInput = $('#titleInput');
+        const descInput = $('#descInput');
+        const mainFile = $('#mainFile');
+        const galleryFiles = $('#galleryFiles');
+        const fileList = $('#fileList');
+        const galleryCount = $('#galleryCount');
+        const status = $('#status');
+
+        function setStatus(message, type = '') {
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        function setBusy(busy) {
+            document.querySelectorAll('button, input, textarea').forEach((element) => {
+                if (element !== chooseFolder) element.disabled = busy;
+            });
+            $('#mainPath').disabled = true;
+        }
+
+        function currentItem() {
+            return data.find((item) => item.id === currentGroup);
+        }
+
+        async function readJson() {
+            const handle = await rootHandle.getFileHandle('gallery-data.json');
+            const file = await handle.getFile();
+            data = JSON.parse(await file.text());
+            for (const id of GROUPS) {
+                if (!data.some((item) => item.id === id)) {
+                    data.push({ id, title: '', desc: '', img: `${id}/Main.jpg`, gallery: [`${id}/Main.jpg`] });
+                }
+            }
+        }
+
+        async function writeJson() {
+            const handle = await rootHandle.getFileHandle('gallery-data.json', { create: true });
+            const writable = await handle.createWritable();
+            await writable.write(JSON.stringify(data, null, 2));
+            await writable.close();
+        }
+
+        function renderTabs() {
+            groupTabs.innerHTML = GROUPS.map((id) => `
+                <button class="group-tab ${id === currentGroup ? 'active' : ''}" data-group="${id}">
+                    <b>${id}</b><span>${data.find((item) => item.id === id)?.title || '未命名'}</span>
+                </button>
+            `).join('');
+            groupTabs.querySelectorAll('.group-tab').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    currentGroup = button.dataset.group;
+                    renderTabs();
+                    await loadGroup();
+                });
+            });
+        }
+
+        async function getGroupDirectory(id, create = true) {
+            return rootHandle.getDirectoryHandle(id, { create });
+        }
+
+        async function listImages(id) {
+            const directory = await getGroupDirectory(id);
+            const files = [];
+            for await (const [name, handle] of directory.entries()) {
+                if (handle.kind !== 'file') continue;
+                const extension = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+                if (IMAGE_EXTENSIONS.includes(extension)) files.push({ name, handle });
+            }
+            return files.sort((a, b) => {
+                if (a.name.toLowerCase() === 'main.jpg') return -1;
+                if (b.name.toLowerCase() === 'main.jpg') return 1;
+                return a.name.localeCompare(b.name, 'zh-CN', { numeric: true });
+            });
+        }
+
+        async function loadGroup() {
+            const item = currentItem();
+            groupId.textContent = currentGroup;
+            titleInput.value = item?.title || '';
+            descInput.value = item?.desc || '';
+            mainFile.value = '';
+            galleryFiles.value = '';
+            setStatus('');
+
+            const images = await listImages(currentGroup);
+            galleryCount.textContent = `${images.length} 张`;
+            fileList.innerHTML = images.length ? images.map(({ name }) => `
+                <div class="file-item">
+                    <strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
+                    <span>${name.toLowerCase() === 'main.jpg' ? '轮播主图 / 画册首图' : '画册图片'}</span>
+                </div>
+            `).join('') : '<div class="file-item"><strong>暂无图片</strong><span>请先上传 Main.jpg</span></div>';
+        }
+
+        function escapeHtml(value) {
+            return value.replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[char]));
+        }
+
+        async function writeFile(directory, name, file) {
+            const handle = await directory.getFileHandle(name, { create: true });
+            const writable = await handle.createWritable();
+            await writable.write(file);
+            await writable.close();
+        }
+
+        async function uploadSelectedFiles() {
+            const directory = await getGroupDirectory(currentGroup);
+            if (mainFile.files[0]) await writeFile(directory, 'Main.jpg', mainFile.files[0]);
+            for (const file of galleryFiles.files) {
+                if (file.name.toLowerCase() === 'main.jpg') continue;
+                await writeFile(directory, file.name, file);
+            }
+        }
+
+        async function createThumbnail(file, maxWidth, quality) {
+            const bitmap = await createImageBitmap(file);
+            try {
+                const scale = Math.min(1, maxWidth / bitmap.width);
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+                canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+                canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                return await new Promise((resolve, reject) => {
+                    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('缩略图生成失败')), 'image/jpeg', quality);
+                });
+            } finally {
+                bitmap.close();
+            }
+        }
+
+        async function rebuildGroup(id) {
+            const directory = await getGroupDirectory(id);
+            const images = await listImages(id);
+            const main = images.find(({ name }) => name.toLowerCase() === 'main.jpg');
+            if (!main) throw new Error(`${id}/Main.jpg 不存在`);
+
+            const thumbDirectory = await directory.getDirectoryHandle('_thumbs', { create: true });
+            const gallery = [];
+            const thumbnails = [];
+
+            for (const image of images) {
+                const file = await image.handle.getFile();
+                const isMain = image.name.toLowerCase() === 'main.jpg';
+                const thumbName = isMain ? 'Main.jpg' : `${image.name}.jpg`;
+                const thumbnail = await createThumbnail(file, isMain ? 960 : 480, isMain ? 0.68 : 0.42);
+                await writeFile(thumbDirectory, thumbName, thumbnail);
+                gallery.push(`${id}/${encodeURIComponent(image.name)}`);
+                thumbnails.push(`${id}/_thumbs/${encodeURIComponent(thumbName)}`);
+            }
+
+            const item = data.find((entry) => entry.id === id);
+            item.img = `${id}/Main.jpg`;
+            item.mainThumb = `${id}/_thumbs/Main.jpg`;
+            item.gallery = gallery;
+            item.thumbnails = thumbnails;
+        }
+
+        chooseFolder.addEventListener('click', async () => {
+            if (!window.showDirectoryPicker) {
+                alert('当前浏览器不支持文件夹写入，请使用最新版 Chrome 或 Edge。');
+                return;
+            }
+            try {
+                rootHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                await readJson();
+                welcome.hidden = true;
+                workspace.hidden = false;
+                renderTabs();
+                await loadGroup();
+                chooseFolder.textContent = `已连接：${rootHandle.name}`;
+            } catch (error) {
+                if (error.name !== 'AbortError') alert(`读取失败：${error.message}`);
+            }
+        });
+
+        $('#reloadGroup').addEventListener('click', loadGroup);
+
+        $('#saveCurrent').addEventListener('click', async () => {
+            setBusy(true);
+            setStatus('正在保存并处理图片…');
+            try {
+                const item = currentItem();
+                item.title = titleInput.value.trim();
+                item.desc = descInput.value.trim();
+                await uploadSelectedFiles();
+                await rebuildGroup(currentGroup);
+                await writeJson();
+                renderTabs();
+                await loadGroup();
+                setStatus('保存成功。请将本地变更推送到 GitHub。', 'success');
+            } catch (error) {
+                setStatus(`保存失败：${error.message}`, 'error');
+            } finally {
+                setBusy(false);
+            }
+        });
+
+        $('#refreshCurrent').addEventListener('click', async () => {
+            setBusy(true);
+            setStatus(`正在刷新 ${currentGroup} 组缩略图…`);
+            try {
+                await rebuildGroup(currentGroup);
+                await writeJson();
+                await loadGroup();
+                setStatus(`${currentGroup} 组缩略图已刷新。`, 'success');
+            } catch (error) {
+                setStatus(`刷新失败：${error.message}`, 'error');
+            } finally {
+                setBusy(false);
+            }
+        });
+
+        $('#refreshAll').addEventListener('click', async () => {
+            setBusy(true);
+            try {
+                for (const id of GROUPS) {
+                    setStatus(`正在刷新 ${id} 组缩略图…`);
+                    await rebuildGroup(id);
+                }
+                await writeJson();
+                await loadGroup();
+                setStatus('A–F 全部缩略图已刷新。', 'success');
+            } catch (error) {
+                setStatus(`刷新失败：${error.message}`, 'error');
+            } finally {
+                setBusy(false);
+            }
+        });
+    </script>
+</body>
+</html>
