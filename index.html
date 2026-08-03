@@ -2,1105 +2,936 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>图片展示 - 响应式多端适配版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画册内容管理</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
+        * { box-sizing: border-box; }
+        :root {
+            color-scheme: dark;
+            --bg: #091014;
+            --panel: #111a20;
+            --line: rgba(255,255,255,.09);
+            --text: #e8eef2;
+            --muted: #8ba0ad;
+            --accent: #74b9b2;
+            --danger: #e17b7b;
         }
-
         body {
-            background-color: #0b1013;
-            color: #e0e6ed;
-            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            margin: 0;
             min-height: 100vh;
-            overflow: hidden;
+            background: radial-gradient(circle at 15% 0%, #183039, var(--bg) 45%);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
         }
-
-        /* 模拟手机容器：采用静态渐变背景，色调平滑过渡，同时完美适配移动端与桌面端高度 */
-        .app-container {
-            width: 100%;
-            max-width: 414px;
-            height: 100vh;
-            max-height: 896px;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
-            overflow: hidden;
-            transition: background 0.8s ease;
+        button, input, textarea { font: inherit; }
+        button { cursor: pointer; }
+        .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 30px 0 50px; }
+        .topbar { display: flex; gap: 18px; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+        .topbar h1 { margin: 0 0 5px; font-size: 23px; font-weight: 500; letter-spacing: 2px; }
+        .topbar p { margin: 0; color: var(--muted); font-size: 13px; }
+        .button {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px 16px;
+            background: rgba(255,255,255,.05);
+            color: var(--text);
         }
-
-        /* 1. 顶部 Header (利用安全距离与额外边距向下移动，完美避开手机灵动岛/刘海屏，兼顾桌面端) */
-        .header {
-            height: 54px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            margin-top: calc(env(safe-area-inset-top, 20px) + 24px);
-            flex-shrink: 0;
+        .button:hover { border-color: rgba(116,185,178,.55); }
+        .button.primary { background: var(--accent); border-color: var(--accent); color: #071110; font-weight: 600; }
+        .button.danger { color: #ffd7d7; border-color: rgba(225,123,123,.4); }
+        .button:disabled { opacity: .42; cursor: not-allowed; }
+        .workspace { display: grid; grid-template-columns: 190px minmax(0,1fr); gap: 18px; }
+        .sidebar, .panel { background: rgba(17,26,32,.92); border: 1px solid var(--line); border-radius: 16px; }
+        .sidebar { padding: 12px; height: fit-content; }
+        .group-tab {
+            width: 100%; display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 13px; border: 0; border-radius: 10px; background: transparent; color: var(--muted);
+            margin-bottom: 4px;
         }
-
-        .header-title {
-            font-size: 17px;
-            letter-spacing: 6px;
-            color: #d1d8e0;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            font-weight: 300;
-            text-transform: uppercase;
+        .group-tab.active { background: rgba(116,185,178,.14); color: #fff; }
+        .group-tab b { font-family: Georgia, serif; color: var(--accent); font-size: 18px; }
+        .panel { padding: 24px; min-height: 570px; }
+        .empty { min-height: 480px; display: grid; place-items: center; color: var(--muted); text-align: center; line-height: 1.8; }
+        [hidden], .empty[hidden], .editor[hidden], .workspace[hidden] { display: none !important; }
+        .editor-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+        .editor-head h2 { margin: 0; font-size: 20px; font-weight: 500; }
+        .status { min-height: 20px; color: var(--muted); font-size: 13px; margin: 12px 0; }
+        .status.success { color: var(--accent); }
+        .status.error { color: #ff9f9f; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+        .field { display: flex; flex-direction: column; gap: 8px; }
+        .field.full { grid-column: 1 / -1; }
+        label { color: #cbd7dd; font-size: 13px; }
+        input[type="text"], textarea {
+            width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #0c1419;
+            color: var(--text); padding: 11px 12px; outline: none;
         }
-
-        .header-title::before, .header-title::after {
-            content: "";
-            display: inline-block;
-            width: 24px;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, #52636d, transparent);
-        }
-
-        /* 2. 字母导航 A - F (适当增加顶部间距，与顶部标题保持舒适的层次感) */
-        .nav-tabs {
-            display: flex;
-            justify-content: space-around;
-            padding: 14px 24px 10px;
-            flex-shrink: 0;
-        }
-
-        .tab-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            cursor: pointer;
-            font-size: 15px;
-            color: #6c7c88;
-            transition: all 0.3s ease;
-            width: 38px;
-        }
-
-        .tab-item.active {
-            color: #ffffff;
-            font-weight: 500;
-        }
-
-        .tab-item .circle-bg {
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: transparent;
-            transition: all 0.3s ease;
-            font-family: Georgia, serif;
-        }
-
-        .tab-item.active .circle-bg {
-            background: rgba(78, 142, 137, 0.25);
-            border: 1px solid rgba(116, 185, 178, 0.45);
-            box-shadow: 0 0 12px rgba(116, 185, 178, 0.2);
-        }
-
-        .tab-indicator {
-            width: 14px;
-            height: 2px;
-            background-color: #74b9b2;
-            margin-top: 6px;
-            border-radius: 2px;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .tab-item.active .tab-indicator {
-            opacity: 1;
-        }
-
-        /* 3. 主图轮播区域 */
-        .carousel-section {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-            margin: 12px 0 0 0;
-        }
-
-        .carousel-container {
-            width: 100%;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .swiper-wrapper {
-            display: flex;
-            transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
-            cursor: grab;
-            align-items: center;
-        }
-
-        .swiper-wrapper:active {
-            cursor: grabbing;
-        }
-
-        .swiper-slide {
-            flex: 0 0 88%;
-            margin: 0 6%;
-            aspect-ratio: 2 / 1;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
-            transition: transform 0.35s ease, opacity 0.35s ease, box-shadow 0.35s ease;
-            opacity: 0.4;
-            transform: scale(0.92);
-            position: relative;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .swiper-slide.active {
-            opacity: 1;
-            transform: scale(1);
-            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
-        }
-
-        .swiper-slide img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-
-        .slide-hint {
-            position: absolute;
-            right: 12px;
-            bottom: 10px;
-            background: rgba(0, 0, 0, 0.45);
-            backdrop-filter: blur(8px);
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.75);
-            letter-spacing: 1px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            pointer-events: none;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        /* 分页圆点 */
-        .pagination {
-            display: flex;
-            justify-content: center;
-            gap: 8px;
-            margin-top: 16px;
-        }
-
-        .dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background-color: #26333c;
-            transition: all 0.3s ease;
-        }
-
-        .dot.active {
-            background-color: #74b9b2;
-            width: 16px;
-            border-radius: 4px;
-        }
-
-        /* 4. 图片信息与美化底栏 (增加底部安全距离适配全面屏手势条) */
-        .info-panel {
-            flex: 1.2;
-            padding: 24px 30px calc(24px + env(safe-area-inset-bottom, 0px));
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.4) 100%);
-        }
-
-        .info-content {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .info-header {
-            display: flex;
-            align-items: baseline;
-            gap: 12px;
-            margin-bottom: 8px;
-        }
-
-        .info-panel .letter {
-            font-size: 32px;
-            color: #74b9b2;
-            font-weight: 300;
-            font-family: Georgia, serif;
-            line-height: 1;
-        }
-
-        .info-panel .title {
-            font-size: 20px;
-            color: #f0f4f8;
-            letter-spacing: 2px;
-            font-weight: 400;
-        }
-
-        .info-panel .divider {
-            width: 24px;
-            height: 1px;
-            background: #74b9b2;
-            margin-bottom: 12px;
-            opacity: 0.6;
-        }
-
-        .info-panel .desc {
-            font-size: 13px;
-            color: #8c9fae;
-            line-height: 1.85;
-            letter-spacing: 1px;
-            font-weight: 300;
-        }
-
-        /* 底部精致入口卡片 */
-        .bottom-action-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 12px;
-            padding: 14px 18px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 16px;
-            backdrop-filter: blur(10px);
-        }
-
-        .bottom-action-card:active {
-            background: rgba(116, 185, 178, 0.1);
-            border-color: rgba(116, 185, 178, 0.3);
-            transform: scale(0.99);
-        }
-
-        .action-text-group {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .action-main-text {
-            font-size: 13px;
-            color: #d1d8e0;
-            letter-spacing: 1px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .action-sub-text {
-            font-size: 11px;
-            color: #637582;
-            letter-spacing: 0.5px;
-        }
-
-        .action-arrow {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: rgba(116, 185, 178, 0.12);
-            color: #74b9b2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            transition: transform 0.3s ease;
-        }
-
-        .bottom-action-card:hover .action-arrow {
-            transform: translateX(3px);
-        }
-
-        /* 5. 底部高弹窗列表 (支持内部上下滚动) */
-        .modal-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.75);
-            backdrop-filter: blur(8px);
-            z-index: 100;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s ease, visibility 0.3s ease;
-        }
-
-        .modal-overlay.open {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .drawer {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            height: 90%;
-            background: #11171b;
-            border-top-left-radius: 24px;
-            border-top-right-radius: 24px;
-            z-index: 101;
-            transform: translateY(100%);
-            transition: transform 0.35s cubic-bezier(0.1, 0.9, 0.2, 1);
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.8);
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
-        }
-
-        .modal-overlay.open .drawer {
-            transform: translateY(0);
-        }
-
-        .drawer-header {
-            padding: 18px 22px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            flex-shrink: 0;
-        }
-
-        .drawer-title {
-            font-size: 15px;
-            color: #d1d8e0;
-            letter-spacing: 1.5px;
-            font-weight: 300;
-        }
-
-        .drawer-close {
-            font-size: 22px;
-            color: #7a8b97;
-            cursor: pointer;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        /* 弹窗内容容器：支持上下滚动 */
-        .drawer-content {
-            flex: 1;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-        }
-
-        .drawer-content::-webkit-scrollbar {
-            width: 4px;
-        }
-        .drawer-content::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
-        }
-
-        .ratio-2-1-item {
-            width: 100%;
-            aspect-ratio: 2 / 1;
-            border-radius: 12px;
-            overflow: hidden;
-            background-color: #1a242a;
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
-            cursor: pointer;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            flex-shrink: 0;
-        }
-
-        .ratio-2-1-item:active {
-            transform: scale(0.98);
-        }
-
-        .ratio-2-1-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-
-        /* 6. 大图预览 Lightbox */
-        .lightbox-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.94);
-            backdrop-filter: blur(10px);
-            z-index: 200;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s ease, visibility 0.3s ease;
-        }
-
-        .lightbox-overlay.open {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .lightbox-overlay.is-loading::after {
-            content: "高清图片加载中…";
-            position: absolute;
-            left: 50%;
-            bottom: 28px;
-            transform: translateX(-50%);
-            padding: 7px 12px;
-            border-radius: 18px;
-            background: rgba(0, 0, 0, 0.58);
-            color: rgba(255, 255, 255, 0.82);
-            font-size: 12px;
-            letter-spacing: 1px;
-            pointer-events: none;
-        }
-
-        .lightbox-img {
-            max-width: 95%;
-            max-height: 85%;
-            object-fit: contain;
-            border-radius: 8px;
-            box-shadow: 0 0 30px rgba(0,0,0,0.9);
-            transform: scale(0.9);
-            transition: transform 0.3s ease;
-        }
-
-        .lightbox-overlay.open .lightbox-img {
-            transform: scale(1);
-        }
-
-        .lightbox-close {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            color: #ffffff;
-            font-size: 24px;
-            cursor: pointer;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(255, 255, 255, 0.12);
-            border-radius: 50%;
-        }
-    
-
-        /* Responsive bridge: wrappers do not affect the original portrait layout. */
-        .desktop-left-pane,
-        .desktop-right-pane,
-        .lightbox-container {
-            display: contents;
-        }
-        @media (min-width: 900px) and (min-height: 600px) {
-            body {
-                background: #06090c;
-            }
-            .app-container {
-                max-width: 1520px;
-                max-height: 880px;
-                height: 92vh;
-                width: 95vw;
-                border-radius: 20px;
-                flex-direction: row;
-                box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
-            }
-            
-            /* 左侧面板：大屏下的主图与轮播展示区 */
-            .desktop-left-pane {
-                display: flex;
-                display: flex;
-                flex: 1.3;
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
-                padding: 30px 24px 24px 30px;
-                border-right: 1px solid rgba(255, 255, 255, 0.06);
-                height: 100%;
-                position: relative;
-            }
-
-            /* 右侧面板：大屏下的信息说明与画册列表/抽屉内嵌区 */
-            .desktop-right-pane {
-                display: flex;
-                display: flex;
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                padding: 30px;
-                height: 100%;
-                background: rgba(0, 0, 0, 0.2);
-            }
-
-            .header {
-                margin-top: 0 !important;
-                justify-content: flex-start !important;
-                margin-bottom: 10px;
-            }
-
-            .header-title {
-                font-size: 19px !important;
-            }
-
-            .nav-tabs {
-                padding: 8px 0 16px !important;
-                justify-content: flex-start !important;
-                gap: 12px;
-            }
-
-            .tab-item {
-                width: 42px !important;
-            }
-
-            .tab-item .circle-bg {
-                width: 42px !important;
-                height: 42px !important;
-                font-size: 16px !important;
-            }
-
-            .carousel-section {
-                margin: auto 0 !important;
-            }
-
-            .swiper-slide {
-                flex: 0 0 92% !important;
-                margin: 0 4% !important;
-            }
-
-            /* 横屏时隐藏大图右下角的点击切换提示 */
-            .slide-hint {
-                display: none !important;
-            }
-
-            .info-panel {
-                background: transparent !important;
-                padding: 0 !important;
-                flex: none !important;
-                margin-top: 20px;
-            }
-
-            /* 横屏时不显示图二内容（底部操作卡片） */
-            .bottom-action-card {
-                display: none !important;
-            }
-
-            /* 隐藏手机端单独的弹窗遮罩结构，在大屏下直接将画册融入右侧面板展示 */
-            .modal-overlay {
-                position: static !important;
-                background: transparent !important;
-                backdrop-filter: none !important;
-                opacity: 1 !important;
-                visibility: visible !important;
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                overflow: hidden;
-                margin-top: 0;
-            }
-
-            .drawer {
-                position: static !important;
-                transform: none !important;
-                height: 100% !important;
-                background: transparent !important;
-                border-radius: 0 !important;
-                box-shadow: none !important;
-                border: none !important;
-                display: flex;
-                flex-direction: column;
-            }
-
-            .drawer-header {
-                padding: 0 0 14px 0 !important;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-            }
-
-            .drawer-close {
-                display: none !important;
-            }
-
-            .drawer-content {
-                padding: 16px 0 0 0 !important;
-                gap: 14px !important;
-            }
-        }
-
-        @media (min-width: 900px) and (min-height: 600px) {
-            .lightbox-container {
-                display: flex;
-                max-width: 95%;
-                max-height: 85%;
-                align-items: center;
-                justify-content: center;
-                transition: transform 0.1s ease-out;
-                transform-origin: center center;
-            }
-
-            .lightbox-container .lightbox-img {
-                width: 100%;
-                height: 100%;
-                max-width: none;
-                max-height: none;
-            }
+        textarea { min-height: 108px; resize: vertical; line-height: 1.65; }
+        input:focus, textarea:focus { border-color: rgba(116,185,178,.65); }
+        .upload-box { border: 1px dashed rgba(116,185,178,.35); border-radius: 12px; padding: 16px; background: rgba(116,185,178,.04); }
+        .upload-box p { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+        input[type="file"] { width: 100%; color: var(--muted); font-size: 13px; }
+        .gallery-head { display: flex; align-items: center; justify-content: space-between; margin-top: 24px; }
+        .gallery-head h3 { margin: 0; font-size: 15px; font-weight: 500; }
+        .gallery-count { color: var(--muted); font-size: 12px; }
+        .file-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+        .file-item { min-width: 0; position: relative; border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: #0c1419; overflow: hidden; }
+        .file-thumb { width: 100%; aspect-ratio: 2 / 1; object-fit: cover; display: block; border-radius: 7px; background: #172128; margin-bottom: 8px; }
+        .file-item strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 400; }
+        .file-item span { display: block; color: var(--muted); font-size: 11px; margin-top: 5px; }
+        .pending-file { margin: 9px 0 0; color: var(--accent) !important; }
+        .draft-dot { width: 7px; height: 7px; border-radius: 50%; background: #f0bd67; box-shadow: 0 0 8px rgba(240,189,103,.45); }
+        .gallery-tools { display: flex; align-items: center; gap: 10px; }
+        .delete-toggle.active { color: #fff; background: rgba(207,62,62,.82); border-color: rgba(255,120,120,.7); }
+        .delete-cover { display: none; position: absolute; inset: 8px 8px 48px; border: 0; border-radius: 7px; background: rgba(143,15,24,.68); color: #fff; font-size: 54px; line-height: 1; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+        .file-list.delete-mode .file-item:not(.main-item) .delete-cover { display: flex; }
+        .file-list.delete-mode .file-item:not(.main-item) { border-color: rgba(255,90,90,.55); }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+        .notice { border: 1px solid rgba(255,194,102,.22); background: rgba(255,194,102,.06); color: #d9c29f; border-radius: 12px; padding: 12px 14px; font-size: 12px; line-height: 1.7; margin-bottom: 18px; }
+        .github-panel { margin-top: 24px; padding: 18px; border: 1px solid rgba(116,185,178,.22); border-radius: 14px; background: rgba(116,185,178,.045); }
+        .github-panel h3 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
+        .github-panel > p { margin: 0 0 15px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+        .github-grid { display: grid; grid-template-columns: 1fr 1fr 110px; gap: 12px; }
+        .github-grid .wide { grid-column: span 2; }
+        .github-grid input { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #0c1419; color: var(--text); padding: 10px 11px; outline: none; }
+        .github-grid input:focus { border-color: rgba(116,185,178,.65); }
+        .github-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+        .github-help { color: var(--muted); font-size: 11px; }
+        .github-help a { color: var(--accent); }
+        @media (max-width: 760px) {
+            .shell { width: min(100% - 20px, 720px); padding-top: 18px; }
+            .topbar { align-items: flex-start; flex-direction: column; }
+            .workspace { grid-template-columns: 1fr; }
+            .sidebar { display: grid; grid-template-columns: repeat(6, 1fr); padding: 7px; }
+            .group-tab { justify-content: center; padding: 10px 4px; }
+            .group-tab span { display: none; }
+            .panel { padding: 17px; }
+            .form-grid { grid-template-columns: 1fr; }
+            .field.full { grid-column: auto; }
+            .file-list { grid-template-columns: 1fr 1fr; }
+            .github-grid { grid-template-columns: 1fr; }
+            .github-grid .wide { grid-column: auto; }
         }
     </style>
 </head>
 <body>
-
-    <div class="app-container" id="appContainer">
-        <!-- 适配PC端横屏的左侧面板 -->
-        <div class="desktop-left-pane">
-            <!-- 顶部标题栏 -->
-            <div class="header">
-                <div class="header-title">图片展示</div>
+    <main class="shell">
+        <header class="topbar">
+            <div>
+                <h1>画册内容管理</h1>
+                <p>管理 A–F 标题、正文、图片清单与缩略图</p>
             </div>
+            <button class="button primary" id="chooseFolder">选择网站文件夹</button>
+        </header>
 
-            <!-- A-F 导航标签 -->
-            <div class="nav-tabs" id="navTabs"></div>
+        <div class="notice">
+            请选择包含 index.html 与 gallery-data.json 的本地网站文件夹。修改会写入本地文件；完成后仍需将变更推送或上传到 GitHub。
+        </div>
 
-            <!-- 轮播主图区域 (2:1 比例) -->
-            <div class="carousel-section">
-                <div class="carousel-container">
-                    <div class="swiper-wrapper" id="swiperWrapper"></div>
-                </div>
-                <!-- 分页圆点 -->
-                <div class="pagination" id="pagination"></div>
-            </div>
+        <section class="panel empty" id="welcome">
+            <div>尚未连接网站文件夹<br>请使用 Chrome 或 Edge 点击“选择网站文件夹”</div>
+        </section>
 
-            <!-- 图片文字描述与底部精致面板 (移动端默认展示，PC大屏下保留描述) -->
-            <div class="info-panel" id="infoPanelContainer">
-                <div class="info-content">
-                    <div class="info-header">
-                        <div class="letter" id="infoLetter">A</div>
-                        <div class="title" id="infoTitle">山水行舟图</div>
+        <section class="workspace" id="workspace" hidden>
+            <nav class="sidebar" id="groupTabs"></nav>
+            <div class="panel">
+                <div class="editor" id="editor">
+                    <div class="editor-head">
+                        <h2><span id="groupId">A</span> 组内容</h2>
+                        <button class="button" id="reloadGroup">重新读取</button>
                     </div>
-                    <div class="divider"></div>
-                    <div class="desc" id="infoDesc">青山隐隐水迢迢，舟行碧波上，远岸炊烟起，心随景远，意境悠长。</div>
-                </div>
-
-                <!-- 底部操作卡片 (横版时已自动隐藏) -->
-                <div class="bottom-action-card" id="actionCardBtn" onclick="handleActionCardClick()">
-                    <div class="action-text-group">
-                        <div class="action-main-text">
-                            <span id="actionMainTextSpan">点击图集或此处查看合集</span>
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="titleInput">标题</label>
+                            <input id="titleInput" type="text" maxlength="100">
+                        </div>
+                        <div class="field">
+                            <label>当前主图</label>
+                            <input id="mainPath" type="text" value="Main.jpg" disabled>
+                        </div>
+                        <div class="field full">
+                            <label for="descInput">正文</label>
+                            <textarea id="descInput" maxlength="1000"></textarea>
+                        </div>
+                        <div class="field upload-box">
+                            <label for="mainFile">替换主图</label>
+                            <p>选择图片后将保存为 Main.jpg，同时覆盖原主图。</p>
+                            <input id="mainFile" type="file" accept="image/*">
+                            <p class="pending-file" id="pendingMain"></p>
+                        </div>
+                        <div class="field upload-box">
+                            <label for="galleryFiles">添加画册图片</label>
+                            <p>可多选；同名文件会被覆盖，Main.jpg 请使用左侧入口替换。</p>
+                            <input id="galleryFiles" type="file" accept="image/*" multiple>
+                            <p class="pending-file" id="pendingGallery"></p>
                         </div>
                     </div>
-                    <div class="action-arrow">➔</div>
-                </div>
-            </div>
-        </div>
 
-        <!-- 适配PC端横屏的右侧面板 (在PC大屏下直接作为画册展区，手机端则作为上拉抽屉) -->
-        <div class="desktop-right-pane">
-            <!-- 底部高弹窗列表 / PC大屏内嵌画册列表 -->
-            <div class="modal-overlay" id="modalOverlay">
-                <div class="drawer" onclick="event.stopPropagation()">
-                    <div class="drawer-header">
-                        <span class="drawer-title" id="drawerTitle">画册列表</span>
-                        <span class="drawer-close" id="closeDrawer">&times;</span>
+                    <div class="gallery-head">
+                        <h3>文件夹中的图片</h3>
+                        <div class="gallery-tools">
+                            <span class="gallery-count" id="galleryCount">0 张</span>
+                            <button class="button delete-toggle" id="deleteToggle">进入删除模式</button>
+                        </div>
                     </div>
-                    <div class="drawer-content" id="drawerContent"></div>
+                    <div class="file-list" id="fileList"></div>
+
+                    <div class="status" id="status"></div>
+                    <div class="actions">
+                        <button class="button primary" id="saveCurrent">保存标题正文并上传图片</button>
+                        <button class="button" id="refreshCurrent">刷新当前组缩略图</button>
+                        <button class="button" id="refreshAll">刷新全部 A–F</button>
+                    </div>
+
+                    <section class="github-panel">
+                        <h3>上传到 GitHub</h3>
+                        <p>将所选本地网站文件夹中的全部网页、JSON、A–F 图片及缩略图提交到指定仓库。仓库配置和令牌会保存在当前浏览器。</p>
+                        <div class="github-grid">
+                            <div class="field">
+                                <label for="githubOwner">GitHub 用户名或组织</label>
+                                <input id="githubOwner" type="text" autocomplete="off" placeholder="例如：octocat">
+                            </div>
+                            <div class="field">
+                                <label for="githubRepo">仓库名称</label>
+                                <input id="githubRepo" type="text" autocomplete="off" placeholder="例如：my-gallery">
+                            </div>
+                            <div class="field">
+                                <label for="githubBranch">分支</label>
+                                <input id="githubBranch" type="text" value="main" autocomplete="off">
+                            </div>
+                            <div class="field wide">
+                                <label for="githubToken">Fine-grained personal access token</label>
+                                <input id="githubToken" type="password" autocomplete="new-password" placeholder="需要仓库 Contents: Read and write 权限">
+                            </div>
+                            <div class="field">
+                                <label for="githubPath">仓库内目录（可留空）</label>
+                                <input id="githubPath" type="text" autocomplete="off" placeholder="例如：docs">
+                            </div>
+                        </div>
+                        <div class="github-actions">
+                            <button class="button primary" id="uploadGithub">上传并创建提交</button>
+                            <button class="button danger" id="restoreGithub">从云端恢复到本地</button>
+                            <span class="github-help"><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">创建访问令牌</a></span>
+                        </div>
+                        <p class="github-help">用户名、仓库、分支、目录和访问令牌都会保存在当前浏览器。请仅在你信任的私人电脑上使用。</p>
+                    </section>
                 </div>
             </div>
-        </div>
-
-        <!-- 全屏大图放大预览 (Lightbox) -->
-        <div class="lightbox-overlay" id="lightboxOverlay">
-            <span class="lightbox-close" id="closeLightbox">&times;</span>
-            <div class="lightbox-container" id="lightboxContainer">
-                <img src="" alt="放大图" class="lightbox-img" id="lightboxImg">
-            </div>
-        </div>
-    </div>
-
-    <!-- 隐藏的 Canvas 用于提取图片主要色调 -->
-    <canvas id="colorCanvas" style="display:none;"></canvas>
+        </section>
+    </main>
 
     <script>
-        // A-F 标题、正文与图片配置从同目录 JSON 文件异步加载。
-        let itemsData = [];
+        const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F'];
+        const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp'];
+        const GITHUB_SETTINGS_KEY = 'gallery-admin-github-settings-v1';
+        const DIRECTORY_DB_NAME = 'gallery-admin-directory-v1';
+        const DIRECTORY_STORE_NAME = 'handles';
+        let rootHandle = null;
+        let savedRootHandle = null;
+        let data = [];
+        let currentGroup = 'A';
+        const drafts = {};
+        let previewUrls = [];
+        let deleteMode = false;
 
-        let currentIndex = 0;
-        let currentScale = 1; // 记录当前缩放倍数
-        let lightboxRequestId = 0;
+        const $ = (selector) => document.querySelector(selector);
+        const chooseFolder = $('#chooseFolder');
+        const welcome = $('#welcome');
+        const workspace = $('#workspace');
+        const groupTabs = $('#groupTabs');
+        const groupId = $('#groupId');
+        const titleInput = $('#titleInput');
+        const descInput = $('#descInput');
+        const mainFile = $('#mainFile');
+        const galleryFiles = $('#galleryFiles');
+        const pendingMain = $('#pendingMain');
+        const pendingGallery = $('#pendingGallery');
+        const fileList = $('#fileList');
+        const galleryCount = $('#galleryCount');
+        const status = $('#status');
 
-        // DOM 元素
-        const appContainer = document.getElementById('appContainer');
-        const navTabs = document.getElementById('navTabs');
-        const swiperWrapper = document.getElementById('swiperWrapper');
-        const pagination = document.getElementById('pagination');
-        const infoLetter = document.getElementById('infoLetter');
-        const infoTitle = document.getElementById('infoTitle');
-        const infoDesc = document.getElementById('infoDesc');
-        const modalOverlay = document.getElementById('modalOverlay');
-        const closeDrawer = document.getElementById('closeDrawer');
-        const drawerContent = document.getElementById('drawerContent');
-        const drawerTitle = document.getElementById('drawerTitle');
-
-        const lightboxOverlay = document.getElementById('lightboxOverlay');
-        const lightboxContainer = document.getElementById('lightboxContainer');
-        const lightboxImg = document.getElementById('lightboxImg');
-        const closeLightbox = document.getElementById('closeLightbox');
-        const colorCanvas = document.getElementById('colorCanvas');
-        const ctx = colorCanvas.getContext('2d');
-
-        // 检测当前是否为PC大屏横屏模式
-        function isDesktopMode() {
-            return window.innerWidth >= 900 && window.innerHeight >= 600;
+        function loadGithubSettings() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(GITHUB_SETTINGS_KEY) || '{}');
+                $('#githubOwner').value = saved.owner || '';
+                $('#githubRepo').value = saved.repo || '';
+                $('#githubBranch').value = saved.branch || 'main';
+                $('#githubPath').value = saved.path || '';
+                $('#githubToken').value = saved.token || '';
+            } catch (_) {
+                localStorage.removeItem(GITHUB_SETTINGS_KEY);
+            }
         }
 
-        // 初始化
-        async function init() {
+        function saveGithubSettings() {
+            localStorage.setItem(GITHUB_SETTINGS_KEY, JSON.stringify({
+                owner: $('#githubOwner').value.trim(),
+                repo: $('#githubRepo').value.trim(),
+                branch: $('#githubBranch').value.trim() || 'main',
+                path: $('#githubPath').value.trim(),
+                token: $('#githubToken').value.trim()
+            }));
+        }
+
+        ['githubOwner', 'githubRepo', 'githubBranch', 'githubPath', 'githubToken'].forEach((id) => {
+            $(`#${id}`).addEventListener('input', saveGithubSettings);
+        });
+        loadGithubSettings();
+
+        function openDirectoryDatabase() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DIRECTORY_DB_NAME, 1);
+                request.onupgradeneeded = () => request.result.createObjectStore(DIRECTORY_STORE_NAME);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function saveDirectoryHandle(handle) {
+            const database = await openDirectoryDatabase();
             try {
-                const response = await fetch('./gallery-data.json', { cache: 'no-cache' });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const data = await response.json();
-                if (!Array.isArray(data) || !data.length) throw new Error('JSON 数据为空');
-                itemsData = data;
-            } catch (error) {
-                console.error('gallery-data.json 加载失败：', error);
-                infoTitle.textContent = '数据加载失败';
-                infoDesc.textContent = '请通过本地服务器或网站访问此页面，并确认 gallery-data.json 与 HTML 位于同一目录。';
+                await new Promise((resolve, reject) => {
+                    const transaction = database.transaction(DIRECTORY_STORE_NAME, 'readwrite');
+                    transaction.objectStore(DIRECTORY_STORE_NAME).put(handle, 'root');
+                    transaction.oncomplete = resolve;
+                    transaction.onerror = () => reject(transaction.error);
+                });
+            } finally {
+                database.close();
+            }
+        }
+
+        async function loadDirectoryHandle() {
+            const database = await openDirectoryDatabase();
+            try {
+                return await new Promise((resolve, reject) => {
+                    const transaction = database.transaction(DIRECTORY_STORE_NAME, 'readonly');
+                    const request = transaction.objectStore(DIRECTORY_STORE_NAME).get('root');
+                    request.onsuccess = () => resolve(request.result || null);
+                    request.onerror = () => reject(request.error);
+                });
+            } finally {
+                database.close();
+            }
+        }
+
+        function setStatus(message, type = '') {
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        function setBusy(busy) {
+            document.querySelectorAll('button, input, textarea').forEach((element) => {
+                if (element !== chooseFolder) element.disabled = busy;
+            });
+            $('#mainPath').disabled = true;
+        }
+
+        function currentItem() {
+            return data.find((item) => item.id === currentGroup);
+        }
+
+        function saveDraft(id) {
+            const item = data.find((entry) => entry.id === id);
+            if (!item) return;
+            const existing = drafts[id];
+            const selectedMain = mainFile.files[0] || existing?.mainFile || null;
+            const selectedGallery = galleryFiles.files.length ? Array.from(galleryFiles.files) : (existing?.galleryFiles || []);
+            const draft = {
+                title: titleInput.value,
+                desc: descInput.value,
+                mainFile: selectedMain,
+                galleryFiles: selectedGallery
+            };
+            const changed = draft.title !== (item.title || '') || draft.desc !== (item.desc || '') || !!draft.mainFile || draft.galleryFiles.length > 0;
+            if (changed) drafts[id] = draft;
+            else delete drafts[id];
+        }
+
+        async function readJson() {
+            const handle = await rootHandle.getFileHandle('gallery-data.json');
+            const file = await handle.getFile();
+            data = JSON.parse(await file.text());
+            for (const id of GROUPS) {
+                if (!data.some((item) => item.id === id)) {
+                    data.push({ id, title: '', desc: '', img: `${id}/Main.jpg`, gallery: [`${id}/Main.jpg`] });
+                }
+            }
+        }
+
+        async function writeJson() {
+            const handle = await rootHandle.getFileHandle('gallery-data.json', { create: true });
+            const writable = await handle.createWritable();
+            await writable.write(JSON.stringify(data, null, 2));
+            await writable.close();
+        }
+
+        function renderTabs() {
+            groupTabs.innerHTML = GROUPS.map((id) => `
+                <button class="group-tab ${id === currentGroup ? 'active' : ''}" data-group="${id}">
+                    <b>${id}</b><span>${data.find((item) => item.id === id)?.title || '未命名'}</span>
+                    ${drafts[id] ? '<i class="draft-dot" title="有未保存修改"></i>' : ''}
+                </button>
+            `).join('');
+            groupTabs.querySelectorAll('.group-tab').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    saveDraft(currentGroup);
+                    currentGroup = button.dataset.group;
+                    renderTabs();
+                    await loadGroup();
+                });
+            });
+        }
+
+        async function getGroupDirectory(id, create = true) {
+            return rootHandle.getDirectoryHandle(id, { create });
+        }
+
+        async function listImages(id) {
+            const directory = await getGroupDirectory(id);
+            const files = [];
+            for await (const [name, handle] of directory.entries()) {
+                if (handle.kind !== 'file') continue;
+                const extension = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+                if (IMAGE_EXTENSIONS.includes(extension)) files.push({ name, handle });
+            }
+            return files.sort((a, b) => {
+                if (a.name.toLowerCase() === 'main.jpg') return -1;
+                if (b.name.toLowerCase() === 'main.jpg') return 1;
+                return a.name.localeCompare(b.name, 'zh-CN', { numeric: true });
+            });
+        }
+
+        async function loadGroup() {
+            const item = currentItem();
+            const draft = drafts[currentGroup];
+            groupId.textContent = currentGroup;
+            titleInput.value = draft?.title ?? item?.title ?? '';
+            descInput.value = draft?.desc ?? item?.desc ?? '';
+            mainFile.value = '';
+            galleryFiles.value = '';
+            pendingMain.textContent = draft?.mainFile ? `待上传：${draft.mainFile.name}` : '';
+            pendingGallery.textContent = draft?.galleryFiles?.length ? `待添加：${draft.galleryFiles.length} 张` : '';
+            setDeleteMode(false);
+            setStatus('');
+
+            const images = await listImages(currentGroup);
+            galleryCount.textContent = `${images.length} 张`;
+            previewUrls.forEach((url) => URL.revokeObjectURL(url));
+            previewUrls = [];
+            fileList.innerHTML = '';
+            if (!images.length) {
+                fileList.innerHTML = '<div class="file-item"><strong>暂无图片</strong><span>请先上传 Main.jpg</span></div>';
                 return;
             }
-
-            renderNav();
-            renderSwiper();
-            renderPagination();
-            updateState(0);
-            bindSwipeEvents();
-            bindLightboxZoomEvents(); // 绑定大图缩放事件
-
-            // 如果一开始就是大屏模式，默认直接在右侧渲染当前画册
-            if (isDesktopMode()) {
-                renderDrawerContent(0);
-            }
-
-            // 监听窗口大小变化，动态调整布局行为
-            window.addEventListener('resize', () => {
-                updateState(currentIndex);
-                if (isDesktopMode()) {
-                    modalOverlay.classList.add('open');
-                    renderDrawerContent(currentIndex);
-                } else {
-                    modalOverlay.classList.remove('open');
+            let thumbDirectory = null;
+            try {
+                const directory = await getGroupDirectory(currentGroup);
+                thumbDirectory = await directory.getDirectoryHandle('_thumbs');
+            } catch (_) {}
+            for (const image of images) {
+                let previewFile = await image.handle.getFile();
+                if (thumbDirectory) {
+                    const thumbName = image.name.toLowerCase() === 'main.jpg' ? 'Main.jpg' : `${image.name}.jpg`;
+                    try {
+                        const thumbHandle = await thumbDirectory.getFileHandle(thumbName);
+                        previewFile = await thumbHandle.getFile();
+                    } catch (_) {}
                 }
-            });
-        }
-
-        // 渲染 A-F 导航
-        function renderNav() {
-            navTabs.innerHTML = itemsData.map((item, index) => `
-                <div class="tab-item ${index === 0 ? 'active' : ''}" onclick="goToSlide(${index})">
-                    <div class="circle-bg">${item.id}</div>
-                    <div class="tab-indicator"></div>
-                </div>
-            `).join('');
-        }
-
-        // 渲染主图轮播
-        function renderSwiper() {
-            swiperWrapper.innerHTML = itemsData.map((item, index) => `
-                <div class="swiper-slide ${index === 0 ? 'active' : ''}" onclick="handleSlideClick(${index})">
-                    <img src="${item.mainThumb || buildImageUrl(item.img, 960, 68)}" alt="${item.title}" crossorigin="anonymous"
-                         decoding="async" fetchpriority="${index === 0 ? 'high' : 'low'}" draggable="false" />
-                </div>
-            `).join('');
-        }
-
-        // 渲染指示圆点
-        function renderPagination() {
-            pagination.innerHTML = itemsData.map((_, index) => `
-                <div class="dot ${index === 0 ? 'active' : ''}"></div>
-            `).join('');
-        }
-
-        function goToSlide(index) {
-            if (index < 0 || index >= itemsData.length) return;
-            currentIndex = index;
-            updateState(currentIndex);
-            if (isDesktopMode()) {
-                renderDrawerContent(currentIndex);
+                const previewUrl = URL.createObjectURL(previewFile);
+                previewUrls.push(previewUrl);
+                const card = document.createElement('div');
+                const isMain = image.name.toLowerCase() === 'main.jpg';
+                card.className = `file-item ${isMain ? 'main-item' : ''}`;
+                card.innerHTML = `
+                    <img class="file-thumb" src="${previewUrl}" alt="${escapeHtml(image.name)}">
+                    <strong title="${escapeHtml(image.name)}">${escapeHtml(image.name)}</strong>
+                    <span>${isMain ? '轮播主图 / 画册首图（不可删除）' : '画册图片'}</span>
+                    ${isMain ? '' : `<button class="delete-cover" type="button" aria-label="删除 ${escapeHtml(image.name)}">&times;</button>`}
+                `;
+                if (!isMain) card.querySelector('.delete-cover').addEventListener('click', () => deleteGalleryImage(image.name));
+                fileList.appendChild(card);
             }
         }
 
-        function updateState(index) {
-            const slideWidth = swiperWrapper.parentElement.offsetWidth;
-            const offset = -index * slideWidth;
-            swiperWrapper.style.transform = `translateX(${offset}px)`;
-
-            const slides = document.querySelectorAll('.swiper-slide');
-            slides.forEach((slide, i) => {
-                slide.classList.toggle('active', i === index);
-            });
-
-            const tabs = document.querySelectorAll('.tab-item');
-            tabs.forEach((tab, i) => {
-                tab.classList.toggle('active', i === index);
-            });
-
-            const dots = document.querySelectorAll('.dot');
-            dots.forEach((dot, i) => {
-                dot.classList.toggle('active', i === index);
-            });
-
-            const data = itemsData[index];
-            infoLetter.textContent = data.id;
-            infoTitle.textContent = data.title;
-            infoDesc.textContent = data.desc;
-
-            extractColorsAndApplyBackground(data.img);
+        function escapeHtml(value) {
+            return value.replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[char]));
         }
 
-        /* 提取图片主要色调并生成静态多色渐变背景 */
-        function extractColorsAndApplyBackground(imgSrc) {
-            const img = new Image();
-            img.crossOrigin = 'Anonymous';
-            img.src = imgSrc;
-            img.onload = () => {
-                colorCanvas.width = 40;
-                colorCanvas.height = 40;
-                ctx.drawImage(img, 0, 0, 40, 40);
+        function setDeleteMode(enabled) {
+            deleteMode = enabled;
+            fileList.classList.toggle('delete-mode', enabled);
+            const button = $('#deleteToggle');
+            button.classList.toggle('active', enabled);
+            button.textContent = enabled ? '退出删除模式' : '进入删除模式';
+        }
 
+        async function deleteGalleryImage(name) {
+            if (!deleteMode || name.toLowerCase() === 'main.jpg') return;
+            if (!confirm(`确定删除 ${currentGroup}/${name}？此操作会删除本地图片和对应缩略图。`)) return;
+            setBusy(true);
+            setStatus(`正在删除 ${name}…`);
+            try {
+                const directory = await getGroupDirectory(currentGroup);
+                await directory.removeEntry(name);
                 try {
-                    const imageData = ctx.getImageData(0, 0, 40, 40).data;
-                    let r1 = 0, g1 = 0, b1 = 0;
-                    let r2 = 0, g2 = 0, b2 = 0;
-                    let r3 = 0, g3 = 0, b3 = 0;
-                    let len = imageData.length;
-                    let part = Math.floor(len / 3);
-
-                    for (let i = 0; i < len; i += 16) {
-                        const r = imageData[i];
-                        const g = imageData[i+1];
-                        const b = imageData[i+2];
-                        if (i < part) {
-                            r1 += r; g1 += g; b1 += b;
-                        } else if (i < part * 2) {
-                            r2 += r; g2 += g; b2 += b;
-                        } else {
-                            r3 += r; g3 += g; b3 += b;
-                        }
-                    }
-
-                    const count = part / 16;
-                    r1 = Math.floor((r1 / count) * 0.35); g1 = Math.floor((g1 / count) * 0.35); b1 = Math.floor((b1 / count) * 0.35);
-                    r2 = Math.floor((r2 / count) * 0.25); g2 = Math.floor((g2 / count) * 0.25); b2 = Math.floor((b2 / count) * 0.25);
-                    r3 = Math.floor((r3 / count) * 0.15); g3 = Math.floor((g3 / count) * 0.15); b3 = Math.floor((b3 / count) * 0.15);
-
-                    const color1 = `rgb(${r1}, ${g1}, ${b1})`;
-                    const color2 = `rgb(${r2}, ${g2}, ${b2})`;
-                    const color3 = `rgb(${r3}, ${g3}, ${b3})`;
-
-                    appContainer.style.background = isDesktopMode()
-                        ? `linear-gradient(135deg, ${color1} 0%, ${color2} 60%, ${color3} 100%)`
-                        : `radial-gradient(circle at 50% 25%, ${color1} 0%, ${color2} 55%, ${color3} 100%)`;
-                } catch (e) {
-                    appContainer.style.background = `radial-gradient(circle at 50% 20%, #17232a 0%, #0a0f12 100%)`;
-                }
-            };
-            img.onerror = () => {
-                appContainer.style.background = `radial-gradient(circle at 50% 20%, #17232a 0%, #0a0f12 100%)`;
-            };
-        }
-
-        /* 手势拖拽/滑动支持 */
-        function bindSwipeEvents() {
-            let startX = 0;
-            let isDragging = false;
-
-            const start = (e) => {
-                isDragging = true;
-                startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-                swiperWrapper.style.transition = 'none';
-            };
-
-            const move = (e) => {
-                if (!isDragging) return;
-                const currentX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-                const diffX = currentX - startX;
-                const slideWidth = swiperWrapper.parentElement.offsetWidth;
-                const baseTranslate = -currentIndex * slideWidth;
-                swiperWrapper.style.transform = `translateX(${baseTranslate + diffX}px)`;
-            };
-
-            const end = (e) => {
-                if (!isDragging) return;
-                isDragging = false;
-                const endX = e.type.includes('touch') ? e.changedTouches[0].clientX : e.clientX;
-                const diffX = endX - startX;
-                swiperWrapper.style.transition = 'transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)';
-
-                if (diffX < -50 && currentIndex < itemsData.length - 1) {
-                    currentIndex++;
-                } else if (diffX > 50 && currentIndex > 0) {
-                    currentIndex--;
-                }
-                updateState(currentIndex);
-                if (isDesktopMode()) {
-                    renderDrawerContent(currentIndex);
-                }
-            };
-
-            swiperWrapper.addEventListener('touchstart', start, { passive: true });
-            swiperWrapper.addEventListener('touchmove', move, { passive: true });
-            swiperWrapper.addEventListener('touchend', end);
-
-            swiperWrapper.addEventListener('mousedown', start);
-            window.addEventListener('mousemove', move);
-            window.addEventListener('mouseup', end);
-        }
-
-        function handleSlideClick(index) {
-            goToSlide(index);
-            if (!isDesktopMode()) {
-                openDrawer(index);
-            }
-        }
-
-        function handleActionCardClick() {
-            if (!isDesktopMode()) {
-                openDrawer(currentIndex);
-            }
-        }
-
-        /* 弹窗抽屉与大屏右侧列表逻辑 */
-        function openDrawer(index) {
-            if (isDesktopMode()) return; // PC端无需弹窗抽屉，右侧已固定展示
-            renderDrawerContent(index);
-            modalOverlay.classList.add('open');
-        }
-
-        function renderDrawerContent(index) {
-            const data = itemsData[index];
-            drawerTitle.textContent = `${data.id} · ${data.title} 画册合集`;
-
-            drawerContent.innerHTML = data.gallery.map((imgUrl, galleryIndex) => `
-                <div class="ratio-2-1-item" onclick="openLightbox(${index}, ${galleryIndex})">
-                    <img src="${data.thumbnails?.[galleryIndex] || buildImageUrl(imgUrl, 480, 35)}" alt="${data.title} ${galleryIndex + 1}"
-                         loading="lazy" decoding="async" fetchpriority="low" />
-                </div>
-            `).join('');
-        }
-
-        // 对支持 URL 参数的图片 CDN 请求实际显示尺寸，避免下载远超屏幕需要的大图。
-        function buildImageUrl(source, width, quality) {
-            try {
-                const url = new URL(source, window.location.href);
-                if (url.hostname === 'images.unsplash.com') {
-                    url.searchParams.set('auto', 'format');
-                    url.searchParams.set('fit', 'crop');
-                    url.searchParams.set('w', String(width));
-                    url.searchParams.set('h', String(Math.round(width / 2)));
-                    url.searchParams.set('q', String(quality));
-                }
-                return url.href;
+                    const thumbDirectory = await directory.getDirectoryHandle('_thumbs');
+                    await thumbDirectory.removeEntry(`${name}.jpg`);
+                } catch (_) {}
+                await rebuildGroup(currentGroup);
+                await writeJson();
+                await loadGroup();
+                setStatus(`${name} 已删除。上传到 GitHub 后远程文件也会同步删除。`, 'success');
             } catch (error) {
-                return source;
-            }
-        }
-
-        function closeDrawerFunc() {
-            if (!isDesktopMode()) {
-                modalOverlay.classList.remove('open');
-            }
-        }
-
-        modalOverlay.addEventListener('click', closeDrawerFunc);
-        if (closeDrawer) {
-            closeDrawer.addEventListener('click', closeDrawerFunc);
-        }
-
-        /* 放大预览 Lightbox 逻辑及鼠标滚动整体容器缩放 */
-        async function openLightbox(itemIndex, galleryIndex) {
-            const source = itemsData[itemIndex].gallery[galleryIndex];
-            const requestId = ++lightboxRequestId;
-            const previewUrl = itemsData[itemIndex].thumbnails?.[galleryIndex] || buildImageUrl(source, 640, 42);
-            const targetWidth = Math.min(2400, Math.max(1200, Math.ceil(window.innerWidth * window.devicePixelRatio)));
-            const fullUrl = buildImageUrl(source, targetWidth, 82);
-
-            // 先用已缓存或很小的预览图立即开窗，再无闪烁替换为屏幕适配高清图。
-            lightboxImg.src = previewUrl;
-            lightboxImg.alt = `${itemsData[itemIndex].title} ${galleryIndex + 1}`;
-            lightboxOverlay.classList.add('open');
-            lightboxOverlay.classList.add('is-loading');
-            currentScale = 1; // 重置缩放比例
-            updateLightboxTransform();
-
-            const fullImage = new Image();
-            fullImage.decoding = 'async';
-            fullImage.src = fullUrl;
-            try {
-                await fullImage.decode();
-                if (requestId !== lightboxRequestId || !lightboxOverlay.classList.contains('open')) return;
-                lightboxImg.src = fullUrl;
-            } catch (error) {
-                console.warn('高清图片加载失败，继续使用预览图：', error);
+                setStatus(`删除失败：${error.message}`, 'error');
             } finally {
-                if (requestId === lightboxRequestId) lightboxOverlay.classList.remove('is-loading');
+                setBusy(false);
             }
         }
 
-        function closeLightboxFunc() {
-            lightboxRequestId++;
-            lightboxOverlay.classList.remove('open');
-            lightboxOverlay.classList.remove('is-loading');
+        async function writeFile(directory, name, file) {
+            const handle = await directory.getFileHandle(name, { create: true });
+            const writable = await handle.createWritable();
+            await writable.write(file);
+            await writable.close();
         }
 
-        function updateLightboxTransform() {
-            lightboxContainer.style.transform = `scale(${currentScale})`;
-        }
-
-        function bindLightboxZoomEvents() {
-            // 鼠标滚轮缩放整个图片容器
-            lightboxOverlay.addEventListener('wheel', (e) => {
-                e.preventDefault();
-                if (e.deltaY < 0) {
-                    currentScale = Math.min(currentScale + 0.15, 4); // 最大放大到4倍
+        async function collectFiles(directory, prefix = '') {
+            const result = [];
+            for await (const [name, handle] of directory.entries()) {
+                if (['.git', 'node_modules'].includes(name)) continue;
+                const path = prefix ? `${prefix}/${name}` : name;
+                if (handle.kind === 'directory') {
+                    result.push(...await collectFiles(handle, path));
                 } else {
-                    currentScale = Math.max(currentScale - 0.15, 0.5); // 最小缩小到0.5倍
+                    // 保存稳定的文件句柄，实际上传前再读取最新 File，避免旧 File 引用失效。
+                    result.push({ path, handle });
                 }
-                updateLightboxTransform();
-            }, { passive: false });
+            }
+            return result;
         }
 
-        lightboxOverlay.addEventListener('click', (e) => {
-            // 点击遮罩空白处（非图片容器本身）时关闭
-            if (e.target === lightboxOverlay) {
-                closeLightboxFunc();
+        async function ensureRootPermission() {
+            if (!rootHandle) throw new Error('请先选择本地网站文件夹');
+            const permission = await rootHandle.requestPermission({ mode: 'readwrite' });
+            if (permission !== 'granted') throw new Error('本地网站文件夹的读写权限未授权');
+        }
+
+        function bytesToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 0x8000;
+            let binary = '';
+            for (let index = 0; index < bytes.length; index += chunkSize) {
+                binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+            }
+            return btoa(binary);
+        }
+
+        async function githubRequest(path, token, options = {}) {
+            const response = await fetch(`https://api.github.com${path}`, {
+                ...options,
+                headers: {
+                    Accept: 'application/vnd.github+json',
+                    Authorization: `Bearer ${token}`,
+                    'X-GitHub-Api-Version': '2022-11-28',
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                }
+            });
+            if (!response.ok) {
+                let message = `${response.status} ${response.statusText}`;
+                try { message = (await response.json()).message || message; } catch (_) {}
+                throw new Error(`GitHub：${message}`);
+            }
+            return response.status === 204 ? null : response.json();
+        }
+
+        function readGithubConfig() {
+            const owner = $('#githubOwner').value.trim();
+            const repo = $('#githubRepo').value.trim();
+            const branch = $('#githubBranch').value.trim() || 'main';
+            const token = $('#githubToken').value.trim();
+            const pathPrefix = $('#githubPath').value.trim().replace(/^\/+|\/+$/g, '');
+            if (!owner || !repo || !token) throw new Error('请填写 GitHub 用户名、仓库名称和访问令牌');
+            return { owner, repo, branch, token, pathPrefix };
+        }
+
+        function base64ToBytes(content) {
+            const binary = atob(content.replace(/\s/g, ''));
+            const bytes = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+            return bytes;
+        }
+
+        async function writeRelativeFile(path, content) {
+            const parts = path.split('/').filter(Boolean);
+            const fileName = parts.pop();
+            let directory = rootHandle;
+            for (const part of parts) directory = await directory.getDirectoryHandle(part, { create: true });
+            await writeFile(directory, fileName, new Blob([content]));
+        }
+
+        async function removeRelativeFile(path) {
+            const parts = path.split('/').filter(Boolean);
+            const fileName = parts.pop();
+            let directory = rootHandle;
+            try {
+                for (const part of parts) directory = await directory.getDirectoryHandle(part);
+                await directory.removeEntry(fileName);
+            } catch (error) {
+                if (error.name !== 'NotFoundError') throw error;
+            }
+        }
+
+        async function restoreDirectoryFromGithub() {
+            await ensureRootPermission();
+            const { owner, repo, branch, token, pathPrefix } = readGithubConfig();
+            const encodedOwner = encodeURIComponent(owner);
+            const encodedRepo = encodeURIComponent(repo);
+            const encodedBranch = encodeURIComponent(branch);
+
+            setStatus('正在读取 GitHub 云端文件清单…');
+            const ref = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/ref/heads/${encodedBranch}`, token);
+            const commit = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/commits/${ref.object.sha}`, token);
+            const remoteTree = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/trees/${commit.tree.sha}?recursive=1`, token);
+            if (remoteTree.truncated) throw new Error('GitHub 返回的文件清单不完整，已停止恢复以避免误删');
+
+            const prefix = pathPrefix ? `${pathPrefix}/` : '';
+            const remoteFiles = (remoteTree.tree || [])
+                .filter((item) => item.type === 'blob' && item.path.startsWith(prefix))
+                .map((item) => ({ ...item, localPath: item.path.slice(prefix.length) }))
+                .filter((item) => item.localPath && !item.localPath.startsWith('.git/'));
+            if (!remoteFiles.length) throw new Error(`云端目录 ${pathPrefix || '/'} 中没有文件`);
+
+            const localFiles = await collectFiles(rootHandle);
+            const remotePaths = new Set(remoteFiles.map((item) => item.localPath));
+            const filesToDelete = localFiles.filter((item) => !remotePaths.has(item.path));
+            const draftCount = Object.keys(drafts).length;
+            const warning = [
+                `将用 ${owner}/${repo} 的 ${branch} 分支${pathPrefix ? `/${pathPrefix}` : '/'} 覆盖本地目录。`,
+                `下载或覆盖：${remoteFiles.length} 个文件`,
+                `删除本地多余文件：${filesToDelete.length} 个`,
+                draftCount ? `丢弃未保存分组：${draftCount} 个` : '',
+                '此操作无法在后台撤销，确定继续吗？'
+            ].filter(Boolean).join('\n');
+            if (!confirm(warning)) return false;
+
+            // 先完成全部下载与覆盖，只有云端下载全部成功后才删除本地多余文件。
+            for (let index = 0; index < remoteFiles.length; index++) {
+                const remote = remoteFiles[index];
+                setStatus(`正在恢复 ${index + 1}/${remoteFiles.length}：${remote.localPath}`);
+                const blob = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/blobs/${remote.sha}`, token);
+                if (blob.encoding !== 'base64' || typeof blob.content !== 'string') {
+                    throw new Error(`${remote.localPath} 无法按 Base64 下载`);
+                }
+                await writeRelativeFile(remote.localPath, base64ToBytes(blob.content));
+            }
+
+            for (let index = 0; index < filesToDelete.length; index++) {
+                setStatus(`正在删除本地多余文件 ${index + 1}/${filesToDelete.length}：${filesToDelete[index].path}`);
+                await removeRelativeFile(filesToDelete[index].path);
+            }
+
+            Object.keys(drafts).forEach((id) => delete drafts[id]);
+            await readJson();
+            renderTabs();
+            await loadGroup();
+            return true;
+        }
+
+        async function gitBlobSha(content) {
+            const bytes = new Uint8Array(content);
+            const header = new TextEncoder().encode(`blob ${bytes.byteLength}\0`);
+            const gitObject = new Uint8Array(header.length + bytes.length);
+            gitObject.set(header);
+            gitObject.set(bytes, header.length);
+            const digest = new Uint8Array(await crypto.subtle.digest('SHA-1', gitObject));
+            return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function uploadDirectoryToGithub() {
+            await ensureRootPermission();
+            saveDraft(currentGroup);
+            if (Object.keys(drafts).length) throw new Error('仍有未保存的 A–F 内容修改，请先分别保存后再上传 GitHub');
+            const { owner, repo, branch, token, pathPrefix } = readGithubConfig();
+            const encodedOwner = encodeURIComponent(owner);
+            const encodedRepo = encodeURIComponent(repo);
+            const encodedBranch = encodeURIComponent(branch);
+
+            setStatus('正在读取 GitHub 文件树…');
+            const files = await collectFiles(rootHandle);
+            if (!files.length) throw new Error('所选文件夹中没有可上传文件');
+            const ref = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/ref/heads/${encodedBranch}`, token);
+            const parentSha = ref.object.sha;
+            const commit = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/commits/${parentSha}`, token);
+            const remoteTree = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/trees/${commit.tree.sha}?recursive=1`, token);
+            if (remoteTree.truncated) throw new Error('GitHub 返回的文件清单不完整，已停止上传');
+            const remoteMap = new Map((remoteTree.tree || []).filter((item) => item.type === 'blob').map((item) => [item.path, item.sha]));
+            const localPaths = new Set();
+            const changedFiles = [];
+
+            // 使用与 Git 相同的 blob SHA-1 比较内容，不依赖修改时间或文件名。
+            for (let index = 0; index < files.length; index++) {
+                const entry = files[index];
+                const remotePath = pathPrefix ? `${pathPrefix}/${entry.path}` : entry.path;
+                localPaths.add(remotePath);
+                setStatus(`正在比对 ${index + 1}/${files.length}：${entry.path}`);
+                try {
+                    const file = await entry.handle.getFile();
+                    if (file.size > 90 * 1024 * 1024) throw new Error('文件超过 90MB');
+                    const sha = await gitBlobSha(await file.arrayBuffer());
+                    if (remoteMap.get(remotePath) !== sha) changedFiles.push({ ...entry, remotePath });
+                } catch (error) {
+                    throw new Error(`无法读取本地文件“${entry.path}”：${error.message}`);
+                }
+            }
+
+            const managedPrefixes = GROUPS.map((id) => pathPrefix ? `${pathPrefix}/${id}/` : `${id}/`);
+            const deletedPaths = (remoteTree.tree || [])
+                .filter((item) => item.type === 'blob' && managedPrefixes.some((prefix) => item.path.startsWith(prefix)) && !localPaths.has(item.path))
+                .map((item) => item.path);
+
+            if (!changedFiles.length && !deletedPaths.length) return 'unchanged';
+            const message = `比对完成：${files.length - changedFiles.length} 个未变化，${changedFiles.length} 个需要上传，${deletedPaths.length} 个远程文件需要删除。\n确定提交到 ${owner}/${repo} 的 ${branch} 分支吗？`;
+            if (!confirm(message)) return false;
+
+            const treeItems = deletedPaths.map((path) => ({ path, mode: '100644', type: 'blob', sha: null }));
+            for (let index = 0; index < changedFiles.length; index++) {
+                const entry = changedFiles[index];
+                setStatus(`正在上传变化文件 ${index + 1}/${changedFiles.length}：${entry.path}`);
+                let content;
+                try {
+                    content = await (await entry.handle.getFile()).arrayBuffer();
+                } catch (error) {
+                    throw new Error(`无法读取本地文件“${entry.path}”：${error.message}`);
+                }
+                const blob = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/blobs`, token, {
+                    method: 'POST',
+                    body: JSON.stringify({ content: bytesToBase64(content), encoding: 'base64' })
+                });
+                treeItems.push({ path: entry.remotePath, mode: '100644', type: 'blob', sha: blob.sha });
+            }
+
+            setStatus('正在创建 GitHub 增量提交…');
+            const tree = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/trees`, token, {
+                method: 'POST',
+                body: JSON.stringify({ base_tree: commit.tree.sha, tree: treeItems })
+            });
+            const newCommit = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/commits`, token, {
+                method: 'POST',
+                body: JSON.stringify({ message: `Update gallery content ${new Date().toISOString()}`, tree: tree.sha, parents: [parentSha] })
+            });
+            await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/refs/heads/${encodedBranch}`, token, {
+                method: 'PATCH',
+                body: JSON.stringify({ sha: newCommit.sha, force: false })
+            });
+            return true;
+        }
+
+        async function uploadSelectedFiles(pendingMainFile, pendingGalleryFiles = []) {
+            const directory = await getGroupDirectory(currentGroup);
+            if (pendingMainFile) await writeFile(directory, 'Main.jpg', pendingMainFile);
+            for (const file of pendingGalleryFiles) {
+                if (file.name.toLowerCase() === 'main.jpg') continue;
+                await writeFile(directory, file.name, file);
+            }
+        }
+
+        async function createThumbnail(file, maxWidth, quality) {
+            const bitmap = await createImageBitmap(file);
+            try {
+                const scale = Math.min(1, maxWidth / bitmap.width);
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+                canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+                canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                return await new Promise((resolve, reject) => {
+                    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('缩略图生成失败')), 'image/jpeg', quality);
+                });
+            } finally {
+                bitmap.close();
+            }
+        }
+
+        async function rebuildGroup(id) {
+            const directory = await getGroupDirectory(id);
+            const images = await listImages(id);
+            const main = images.find(({ name }) => name.toLowerCase() === 'main.jpg');
+            if (!main) throw new Error(`${id}/Main.jpg 不存在`);
+
+            const thumbDirectory = await directory.getDirectoryHandle('_thumbs', { create: true });
+            const gallery = [];
+            const thumbnails = [];
+
+            for (const image of images) {
+                const file = await image.handle.getFile();
+                const isMain = image.name.toLowerCase() === 'main.jpg';
+                const thumbName = isMain ? 'Main.jpg' : `${image.name}.jpg`;
+                const thumbnail = await createThumbnail(file, isMain ? 960 : 480, isMain ? 0.68 : 0.42);
+                await writeFile(thumbDirectory, thumbName, thumbnail);
+                gallery.push(`${id}/${encodeURIComponent(image.name)}`);
+                thumbnails.push(`${id}/_thumbs/${encodeURIComponent(thumbName)}`);
+            }
+
+            const item = data.find((entry) => entry.id === id);
+            item.img = `${id}/Main.jpg`;
+            item.mainThumb = `${id}/_thumbs/Main.jpg`;
+            item.gallery = gallery;
+            item.thumbnails = thumbnails;
+        }
+
+        async function connectFolder(handle) {
+            rootHandle = handle;
+            savedRootHandle = handle;
+            await readJson();
+            welcome.hidden = true;
+            workspace.hidden = false;
+            renderTabs();
+            await loadGroup();
+            chooseFolder.textContent = `已连接：${rootHandle.name}`;
+        }
+
+        async function restoreLastFolder() {
+            if (!window.showDirectoryPicker || !window.indexedDB) return;
+            try {
+                savedRootHandle = await loadDirectoryHandle();
+                if (!savedRootHandle) return;
+                const permission = await savedRootHandle.queryPermission({ mode: 'readwrite' });
+                if (permission === 'granted') {
+                    await connectFolder(savedRootHandle);
+                } else {
+                    chooseFolder.textContent = `重新授权：${savedRootHandle.name}`;
+                }
+            } catch (error) {
+                console.warn('自动连接上次文件夹失败：', error);
+            }
+        }
+
+        chooseFolder.addEventListener('click', async () => {
+            if (!window.showDirectoryPicker) {
+                alert('当前浏览器不支持文件夹写入，请使用最新版 Chrome 或 Edge。');
+                return;
+            }
+            try {
+                if (!rootHandle && savedRootHandle) {
+                    const permission = await savedRootHandle.requestPermission({ mode: 'readwrite' });
+                    if (permission === 'granted') {
+                        await connectFolder(savedRootHandle);
+                        return;
+                    }
+                }
+                const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                await saveDirectoryHandle(handle);
+                await connectFolder(handle);
+            } catch (error) {
+                if (error.name !== 'AbortError') alert(`读取失败：${error.message}`);
             }
         });
-        closeLightbox.addEventListener('click', closeLightboxFunc);
 
-        init();
+        mainFile.addEventListener('change', () => {
+            saveDraft(currentGroup);
+            pendingMain.textContent = drafts[currentGroup]?.mainFile ? `待上传：${drafts[currentGroup].mainFile.name}` : '';
+            renderTabs();
+        });
+
+        galleryFiles.addEventListener('change', () => {
+            saveDraft(currentGroup);
+            pendingGallery.textContent = drafts[currentGroup]?.galleryFiles?.length ? `待添加：${drafts[currentGroup].galleryFiles.length} 张` : '';
+            renderTabs();
+        });
+
+        $('#deleteToggle').addEventListener('click', () => setDeleteMode(!deleteMode));
+
+        $('#reloadGroup').addEventListener('click', async () => {
+            if (drafts[currentGroup] && !confirm(`将放弃 ${currentGroup} 组尚未保存的修改，是否继续？`)) return;
+            delete drafts[currentGroup];
+            renderTabs();
+            await loadGroup();
+        });
+
+        $('#saveCurrent').addEventListener('click', async () => {
+            setBusy(true);
+            setStatus('正在保存并处理图片…');
+            try {
+                const item = currentItem();
+                saveDraft(currentGroup);
+                const draft = drafts[currentGroup] || { title: titleInput.value, desc: descInput.value, mainFile: null, galleryFiles: [] };
+                item.title = draft.title.trim();
+                item.desc = draft.desc.trim();
+                await uploadSelectedFiles(draft.mainFile, draft.galleryFiles);
+                await rebuildGroup(currentGroup);
+                await writeJson();
+                delete drafts[currentGroup];
+                renderTabs();
+                await loadGroup();
+                setStatus('保存成功。请将本地变更推送到 GitHub。', 'success');
+            } catch (error) {
+                setStatus(`保存失败：${error.message}`, 'error');
+            } finally {
+                setBusy(false);
+            }
+        });
+
+        $('#refreshCurrent').addEventListener('click', async () => {
+            setBusy(true);
+            setStatus(`正在刷新 ${currentGroup} 组缩略图…`);
+            try {
+                await rebuildGroup(currentGroup);
+                await writeJson();
+                await loadGroup();
+                setStatus(`${currentGroup} 组缩略图已刷新。`, 'success');
+            } catch (error) {
+                setStatus(`刷新失败：${error.message}`, 'error');
+            } finally {
+                setBusy(false);
+            }
+        });
+
+        $('#refreshAll').addEventListener('click', async () => {
+            setBusy(true);
+            try {
+                for (const id of GROUPS) {
+                    setStatus(`正在刷新 ${id} 组缩略图…`);
+                    await rebuildGroup(id);
+                }
+                await writeJson();
+                await loadGroup();
+                setStatus('A–F 全部缩略图已刷新。', 'success');
+            } catch (error) {
+                setStatus(`刷新失败：${error.message}`, 'error');
+            } finally {
+                setBusy(false);
+            }
+        });
+
+        $('#uploadGithub').addEventListener('click', async () => {
+            setBusy(true);
+            try {
+                const uploaded = await uploadDirectoryToGithub();
+                if (uploaded === 'unchanged') setStatus('本地与 GitHub 内容一致，无需上传。', 'success');
+                else if (uploaded) setStatus('GitHub 增量上传成功，Pages 将在稍后自动部署。', 'success');
+                else setStatus('已取消上传。');
+            } catch (error) {
+                setStatus(`上传失败：${error.message}`, 'error');
+            } finally {
+                setBusy(false);
+            }
+        });
+
+        $('#restoreGithub').addEventListener('click', async () => {
+            setBusy(true);
+            try {
+                const restored = await restoreDirectoryFromGithub();
+                if (restored) setStatus('云端恢复完成，本地网站文件夹已与 GitHub 同步。', 'success');
+                else setStatus('已取消云端恢复。');
+            } catch (error) {
+                setStatus(`云端恢复失败：${error.message}`, 'error');
+            } finally {
+                setBusy(false);
+            }
+        });
+
+        restoreLastFolder();
     </script>
 </body>
 </html>
