@@ -1,0 +1,58 @@
+请将 index.html、gallery-data.json、generate-gallery.ps1、.nojekyll 与 A-F 文件夹放在同一层。
+
+目录示例：
+
+index.html
+gallery-data.json
+generate-gallery.ps1
+.nojekyll
+A/
+  Main.jpg
+  01.jpg
+  02.jpg
+B/
+  Main.jpg
+  01.jpg
+C/
+  Main.jpg
+D/
+  Main.jpg
+E/
+  Main.jpg
+F/
+  Main.jpg
+
+要求：
+
+1. A-F 每个文件夹都必须包含名称完全一致的 Main.jpg。
+2. Main.jpg 会作为轮播图和画册第一张图片。
+3. 文件夹中的其他图片会按文件名排序加入画册。
+4. 支持 jpg、jpeg、png、gif、bmp；建议优先使用 jpg 或 png。
+5. 图片准备完成后，在此目录运行 generate-gallery.ps1。
+6. 脚本会更新 gallery-data.json，并在各文件夹生成 _thumbs 缩略图目录。
+7. 将更新后的所有文件和 A-F 文件夹一起上传至 GitHub。
+
+后台管理：
+
+1. 使用 Chrome 或 Edge 打开 GitHub Pages 上的 admin.html。
+2. 点击“选择网站文件夹”，选择本地仓库中包含 index.html 的目录。
+3. 可修改 A-F 标题正文、替换 Main.jpg、批量添加图片和刷新缩略图。
+4. 后台修改的是本地仓库文件，完成后仍需提交并推送至 GitHub。
+
+直接上传 GitHub：
+
+1. 在 admin.html 的“上传到 GitHub”区域填写用户名、仓库名和分支。
+2. 创建 Fine-grained personal access token，只授权目标仓库，并给予 Contents: Read and write 权限。
+3. 仓库配置和访问令牌会保存在当前浏览器，请仅在可信的私人电脑上使用。
+4. 点击“上传并创建提交”，确认后会将所选本地网站文件夹整体提交到 GitHub。
+5. 如果 GitHub Pages 使用 docs 目录，请在“仓库内目录”填写 docs；使用仓库根目录时留空。
+6. 后台会记住上次选择的网站文件夹；浏览器保留授权时，下次打开会自动连接。
+7. 如果浏览器暂停了文件夹权限，点击“重新授权”一次即可恢复原目录。
+
+从云端恢复：
+
+1. 确认 GitHub 用户名、仓库、分支、目录和 Token 正确。
+2. 点击“从云端恢复到本地”。
+3. 后台会显示下载/覆盖数量、删除本地多余文件数量和未保存草稿数量。
+4. 确认后，云端文件覆盖本地，同步结束后本地多余文件会被删除。
+5. 恢复属于破坏性操作，执行前请确认云端版本是需要保留的版本。
