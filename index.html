@@ -22,6 +22,13 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            overscroll-behavior-y: none;
+        }
+
         body {
             background-color: #0b1013;
             color: #e0e6ed;
@@ -30,7 +37,9 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
+            height: 100%;
             overflow: hidden;
+            overscroll-behavior-y: none;
         }
 
         /* 模拟手机容器：采用静态渐变背景，色调平滑过渡，同时完美适配移动端与桌面端高度 */
@@ -38,6 +47,7 @@
             width: 100%;
             max-width: 414px;
             height: 100vh;
+            height: 100dvh;
             max-height: 896px;
             position: relative;
             display: flex;
@@ -900,7 +910,21 @@
         let backgroundRequestId = 0;
 
         // 为手机侧滑返回建立页面内层级：主页 → 画册抽屉 → 图片大图。
-        history.replaceState({ ...(history.state || {}), galleryView: 'base' }, '', location.href);
+        // 使用明确的 hash 路由，兼容 QQ/X5 对“URL 不变的 pushState”识别不稳定的问题。
+        function routeUrl(hash = '') {
+            return `${location.pathname}${location.search}${hash ? `#${hash}` : ''}`;
+        }
+
+        function currentHistoryState() {
+            if (history.state?.galleryView) return history.state;
+            if (location.hash === '#drawer') return { galleryView: 'drawer', itemIndex: currentIndex };
+            if (location.hash === '#lightbox') {
+                return { galleryView: 'lightbox', itemIndex: lightboxItemIndex, galleryIndex: lightboxGalleryIndex };
+            }
+            return { galleryView: 'base' };
+        }
+
+        history.replaceState({ ...(history.state || {}), galleryView: 'base' }, '', routeUrl());
 
         // DOM 元素
         const appContainer = document.getElementById('appContainer');
@@ -1168,8 +1192,8 @@
             if (isDesktopMode()) return; // PC端无需弹窗抽屉，右侧已固定展示
             renderDrawerContent(index);
             modalOverlay.classList.add('open');
-            if (history.state?.galleryView !== 'drawer') {
-                history.pushState({ galleryView: 'drawer', itemIndex: index }, '', location.href);
+            if (currentHistoryState().galleryView !== 'drawer') {
+                history.pushState({ galleryView: 'drawer', itemIndex: index }, '', routeUrl('drawer'));
             }
         }
 
@@ -1204,7 +1228,7 @@
 
         function closeDrawerFunc(fromHistory = false) {
             if (!isDesktopMode()) {
-                if (!fromHistory && history.state?.galleryView === 'drawer') {
+                if (!fromHistory && currentHistoryState().galleryView === 'drawer') {
                     history.back();
                     return;
                 }
@@ -1260,10 +1284,10 @@
             lightboxOverlay.classList.add('open');
             lightboxOverlay.classList.add('is-loading');
             lightboxOverlay.dataset.progress = '高清图片加载中 0%';
-            if (!isDesktopMode() && history.state?.galleryView !== 'lightbox') {
-                history.pushState({ galleryView: 'lightbox', itemIndex, galleryIndex }, '', location.href);
-            } else if (!isDesktopMode() && history.state?.galleryView === 'lightbox') {
-                history.replaceState({ galleryView: 'lightbox', itemIndex, galleryIndex }, '', location.href);
+            if (!isDesktopMode() && currentHistoryState().galleryView !== 'lightbox') {
+                history.pushState({ galleryView: 'lightbox', itemIndex, galleryIndex }, '', routeUrl('lightbox'));
+            } else if (!isDesktopMode()) {
+                history.replaceState({ galleryView: 'lightbox', itemIndex, galleryIndex }, '', routeUrl('lightbox'));
             }
             currentScale = 1; // 重置缩放比例
             currentTranslateX = 0;
@@ -1301,7 +1325,7 @@
         }
 
         function closeLightboxFunc(fromHistory = false) {
-            if (!fromHistory && !isDesktopMode() && history.state?.galleryView === 'lightbox') {
+            if (!fromHistory && !isDesktopMode() && currentHistoryState().galleryView === 'lightbox') {
                 history.back();
                 return;
             }
@@ -1317,8 +1341,9 @@
             }
         }
 
-        window.addEventListener('popstate', (event) => {
-            const view = event.state?.galleryView || 'base';
+        function syncHistoryView(event) {
+            const state = event?.state?.galleryView ? event.state : currentHistoryState();
+            const view = state.galleryView || 'base';
 
             if (view !== 'lightbox' && lightboxOverlay.classList.contains('open')) {
                 closeLightboxFunc(true);
@@ -1327,13 +1352,17 @@
             if (view === 'base') {
                 closeDrawerFunc(true);
             } else if (view === 'drawer' && !isDesktopMode()) {
-                const itemIndex = Number.isInteger(event.state?.itemIndex)
-                    ? event.state.itemIndex
+                const itemIndex = Number.isInteger(state.itemIndex)
+                    ? state.itemIndex
                     : currentIndex;
                 renderDrawerContent(itemIndex);
                 modalOverlay.classList.add('open');
             }
-        });
+        }
+
+        window.addEventListener('popstate', syncHistoryView);
+        // QQ/X5 某些版本更稳定地派发 hashchange，双监听确保侧滑和底部返回键都能回到应用上一层。
+        window.addEventListener('hashchange', syncHistoryView);
 
         function updateLightboxTransform() {
             if (currentScale <= 1) {
