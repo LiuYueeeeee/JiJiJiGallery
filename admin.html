@@ -210,6 +210,7 @@
                         </div>
                         <div class="github-actions">
                             <button class="button primary" id="uploadGithub">上传并创建提交</button>
+                            <button class="button danger" id="restoreGithub">从云端恢复到本地</button>
                             <span class="github-help"><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">创建访问令牌</a></span>
                         </div>
                         <p class="github-help">用户名、仓库、分支、目录和访问令牌都会保存在当前浏览器。请仅在你信任的私人电脑上使用。</p>
@@ -223,7 +224,10 @@
         const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F'];
         const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp'];
         const GITHUB_SETTINGS_KEY = 'gallery-admin-github-settings-v1';
+        const DIRECTORY_DB_NAME = 'gallery-admin-directory-v1';
+        const DIRECTORY_STORE_NAME = 'handles';
         let rootHandle = null;
+        let savedRootHandle = null;
         let data = [];
         let currentGroup = 'A';
         const drafts = {};
@@ -273,6 +277,43 @@
             $(`#${id}`).addEventListener('input', saveGithubSettings);
         });
         loadGithubSettings();
+
+        function openDirectoryDatabase() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DIRECTORY_DB_NAME, 1);
+                request.onupgradeneeded = () => request.result.createObjectStore(DIRECTORY_STORE_NAME);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function saveDirectoryHandle(handle) {
+            const database = await openDirectoryDatabase();
+            try {
+                await new Promise((resolve, reject) => {
+                    const transaction = database.transaction(DIRECTORY_STORE_NAME, 'readwrite');
+                    transaction.objectStore(DIRECTORY_STORE_NAME).put(handle, 'root');
+                    transaction.oncomplete = resolve;
+                    transaction.onerror = () => reject(transaction.error);
+                });
+            } finally {
+                database.close();
+            }
+        }
+
+        async function loadDirectoryHandle() {
+            const database = await openDirectoryDatabase();
+            try {
+                return await new Promise((resolve, reject) => {
+                    const transaction = database.transaction(DIRECTORY_STORE_NAME, 'readonly');
+                    const request = transaction.objectStore(DIRECTORY_STORE_NAME).get('root');
+                    request.onsuccess = () => resolve(request.result || null);
+                    request.onerror = () => reject(request.error);
+                });
+            } finally {
+                database.close();
+            }
+        }
 
         function setStatus(message, type = '') {
             status.textContent = message;
@@ -463,12 +504,17 @@
                 if (handle.kind === 'directory') {
                     result.push(...await collectFiles(handle, path));
                 } else {
-                    const file = await handle.getFile();
-                    if (file.size > 90 * 1024 * 1024) throw new Error(`${path} 超过 90MB，无法通过此页面上传`);
-                    result.push({ path, file });
+                    // 保存稳定的文件句柄，实际上传前再读取最新 File，避免旧 File 引用失效。
+                    result.push({ path, handle });
                 }
             }
             return result;
+        }
+
+        async function ensureRootPermission() {
+            if (!rootHandle) throw new Error('请先选择本地网站文件夹');
+            const permission = await rootHandle.requestPermission({ mode: 'readwrite' });
+            if (permission !== 'granted') throw new Error('本地网站文件夹的读写权限未授权');
         }
 
         function bytesToBase64(buffer) {
@@ -500,8 +546,101 @@
             return response.status === 204 ? null : response.json();
         }
 
+        function readGithubConfig() {
+            const owner = $('#githubOwner').value.trim();
+            const repo = $('#githubRepo').value.trim();
+            const branch = $('#githubBranch').value.trim() || 'main';
+            const token = $('#githubToken').value.trim();
+            const pathPrefix = $('#githubPath').value.trim().replace(/^\/+|\/+$/g, '');
+            if (!owner || !repo || !token) throw new Error('请填写 GitHub 用户名、仓库名称和访问令牌');
+            return { owner, repo, branch, token, pathPrefix };
+        }
+
+        function base64ToBytes(content) {
+            const binary = atob(content.replace(/\s/g, ''));
+            const bytes = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+            return bytes;
+        }
+
+        async function writeRelativeFile(path, content) {
+            const parts = path.split('/').filter(Boolean);
+            const fileName = parts.pop();
+            let directory = rootHandle;
+            for (const part of parts) directory = await directory.getDirectoryHandle(part, { create: true });
+            await writeFile(directory, fileName, new Blob([content]));
+        }
+
+        async function removeRelativeFile(path) {
+            const parts = path.split('/').filter(Boolean);
+            const fileName = parts.pop();
+            let directory = rootHandle;
+            try {
+                for (const part of parts) directory = await directory.getDirectoryHandle(part);
+                await directory.removeEntry(fileName);
+            } catch (error) {
+                if (error.name !== 'NotFoundError') throw error;
+            }
+        }
+
+        async function restoreDirectoryFromGithub() {
+            await ensureRootPermission();
+            const { owner, repo, branch, token, pathPrefix } = readGithubConfig();
+            const encodedOwner = encodeURIComponent(owner);
+            const encodedRepo = encodeURIComponent(repo);
+            const encodedBranch = encodeURIComponent(branch);
+
+            setStatus('正在读取 GitHub 云端文件清单…');
+            const ref = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/ref/heads/${encodedBranch}`, token);
+            const commit = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/commits/${ref.object.sha}`, token);
+            const remoteTree = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/trees/${commit.tree.sha}?recursive=1`, token);
+            if (remoteTree.truncated) throw new Error('GitHub 返回的文件清单不完整，已停止恢复以避免误删');
+
+            const prefix = pathPrefix ? `${pathPrefix}/` : '';
+            const remoteFiles = (remoteTree.tree || [])
+                .filter((item) => item.type === 'blob' && item.path.startsWith(prefix))
+                .map((item) => ({ ...item, localPath: item.path.slice(prefix.length) }))
+                .filter((item) => item.localPath && !item.localPath.startsWith('.git/'));
+            if (!remoteFiles.length) throw new Error(`云端目录 ${pathPrefix || '/'} 中没有文件`);
+
+            const localFiles = await collectFiles(rootHandle);
+            const remotePaths = new Set(remoteFiles.map((item) => item.localPath));
+            const filesToDelete = localFiles.filter((item) => !remotePaths.has(item.path));
+            const draftCount = Object.keys(drafts).length;
+            const warning = [
+                `将用 ${owner}/${repo} 的 ${branch} 分支${pathPrefix ? `/${pathPrefix}` : '/'} 覆盖本地目录。`,
+                `下载或覆盖：${remoteFiles.length} 个文件`,
+                `删除本地多余文件：${filesToDelete.length} 个`,
+                draftCount ? `丢弃未保存分组：${draftCount} 个` : '',
+                '此操作无法在后台撤销，确定继续吗？'
+            ].filter(Boolean).join('\n');
+            if (!confirm(warning)) return false;
+
+            // 先完成全部下载与覆盖，只有云端下载全部成功后才删除本地多余文件。
+            for (let index = 0; index < remoteFiles.length; index++) {
+                const remote = remoteFiles[index];
+                setStatus(`正在恢复 ${index + 1}/${remoteFiles.length}：${remote.localPath}`);
+                const blob = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/blobs/${remote.sha}`, token);
+                if (blob.encoding !== 'base64' || typeof blob.content !== 'string') {
+                    throw new Error(`${remote.localPath} 无法按 Base64 下载`);
+                }
+                await writeRelativeFile(remote.localPath, base64ToBytes(blob.content));
+            }
+
+            for (let index = 0; index < filesToDelete.length; index++) {
+                setStatus(`正在删除本地多余文件 ${index + 1}/${filesToDelete.length}：${filesToDelete[index].path}`);
+                await removeRelativeFile(filesToDelete[index].path);
+            }
+
+            Object.keys(drafts).forEach((id) => delete drafts[id]);
+            await readJson();
+            renderTabs();
+            await loadGroup();
+            return true;
+        }
+
         async function uploadDirectoryToGithub() {
-            if (!rootHandle) throw new Error('请先选择本地网站文件夹');
+            await ensureRootPermission();
             saveDraft(currentGroup);
             if (Object.keys(drafts).length) throw new Error('仍有未保存的 A–F 内容修改，请先分别保存后再上传 GitHub');
             const owner = $('#githubOwner').value.trim();
@@ -527,9 +666,18 @@
             for (let index = 0; index < files.length; index++) {
                 const entry = files[index];
                 setStatus(`正在上传 ${index + 1}/${files.length}：${entry.path}`);
+                let file;
+                let content;
+                try {
+                    file = await entry.handle.getFile();
+                    if (file.size > 90 * 1024 * 1024) throw new Error('文件超过 90MB');
+                    content = await file.arrayBuffer();
+                } catch (error) {
+                    throw new Error(`无法读取本地文件“${entry.path}”：${error.message}`);
+                }
                 const blob = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/blobs`, token, {
                     method: 'POST',
-                    body: JSON.stringify({ content: bytesToBase64(await entry.file.arrayBuffer()), encoding: 'base64' })
+                    body: JSON.stringify({ content: bytesToBase64(content), encoding: 'base64' })
                 });
                 treeItems.push({
                     path: pathPrefix ? `${pathPrefix}/${entry.path}` : entry.path,
@@ -622,19 +770,49 @@
             item.thumbnails = thumbnails;
         }
 
+        async function connectFolder(handle) {
+            rootHandle = handle;
+            savedRootHandle = handle;
+            await readJson();
+            welcome.hidden = true;
+            workspace.hidden = false;
+            renderTabs();
+            await loadGroup();
+            chooseFolder.textContent = `已连接：${rootHandle.name}`;
+        }
+
+        async function restoreLastFolder() {
+            if (!window.showDirectoryPicker || !window.indexedDB) return;
+            try {
+                savedRootHandle = await loadDirectoryHandle();
+                if (!savedRootHandle) return;
+                const permission = await savedRootHandle.queryPermission({ mode: 'readwrite' });
+                if (permission === 'granted') {
+                    await connectFolder(savedRootHandle);
+                } else {
+                    chooseFolder.textContent = `重新授权：${savedRootHandle.name}`;
+                }
+            } catch (error) {
+                console.warn('自动连接上次文件夹失败：', error);
+            }
+        }
+
         chooseFolder.addEventListener('click', async () => {
             if (!window.showDirectoryPicker) {
                 alert('当前浏览器不支持文件夹写入，请使用最新版 Chrome 或 Edge。');
                 return;
             }
             try {
-                rootHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-                await readJson();
-                welcome.hidden = true;
-                workspace.hidden = false;
-                renderTabs();
-                await loadGroup();
-                chooseFolder.textContent = `已连接：${rootHandle.name}`;
+                if (!rootHandle && savedRootHandle) {
+                    const permission = await savedRootHandle.requestPermission({ mode: 'readwrite' });
+                    if (permission === 'granted') {
+                        await connectFolder(savedRootHandle);
+                        return;
+                    }
+                }
+                const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                await saveDirectoryHandle(handle);
+                await connectFolder(handle);
             } catch (error) {
                 if (error.name !== 'AbortError') alert(`读取失败：${error.message}`);
             }
@@ -728,6 +906,21 @@
                 setBusy(false);
             }
         });
+
+        $('#restoreGithub').addEventListener('click', async () => {
+            setBusy(true);
+            try {
+                const restored = await restoreDirectoryFromGithub();
+                if (restored) setStatus('云端恢复完成，本地网站文件夹已与 GitHub 同步。', 'success');
+                else setStatus('已取消云端恢复。');
+            } catch (error) {
+                setStatus(`云端恢复失败：${error.message}`, 'error');
+            } finally {
+                setBusy(false);
+            }
+        });
+
+        restoreLastFolder();
     </script>
 </body>
 </html>
