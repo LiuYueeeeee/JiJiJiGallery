@@ -207,13 +207,26 @@
             margin: 0 6%;
             aspect-ratio: 2 / 1;
             border-radius: 16px;
-            overflow: hidden;
+            overflow: visible;
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
             transition: transform 0.35s ease, opacity 0.35s ease, box-shadow 0.35s ease;
             opacity: 0.4;
             transform: scale(0.92);
             position: relative;
             border: 1px solid rgba(255, 255, 255, 0.05);
+            isolation: isolate;
+        }
+
+        .swiper-slide::before {
+            content: "";
+            position: absolute;
+            inset: -18px;
+            border-radius: 26px;
+            background: var(--slide-image) center / cover no-repeat;
+            filter: blur(18px) saturate(1.08);
+            opacity: 0.34;
+            z-index: 0;
+            pointer-events: none;
         }
 
         .swiper-slide.active {
@@ -227,6 +240,9 @@
             height: 100%;
             object-fit: cover;
             display: block;
+            position: relative;
+            z-index: 1;
+            border-radius: 16px;
         }
 
         .slide-hint {
@@ -324,7 +340,7 @@
 
         /* 主色较亮时切换左侧文字主题，避免浅色文字融入背景。 */
         .desktop-left-pane.light-background .header-title {
-            color: #24343b;
+            color: #18262d;
             text-shadow: 0 1px 1px rgba(255, 255, 255, 0.28);
         }
 
@@ -334,19 +350,19 @@
         }
 
         .desktop-left-pane.light-background .tab-item {
-            color: #53656d;
+            color: #2f444d;
         }
 
         .desktop-left-pane.light-background .tab-item.active {
-            color: #1d3037;
+            color: #10252c;
         }
 
         .desktop-left-pane.light-background .info-panel .letter {
-            color: #087c78;
+            color: #006e6b;
         }
 
         .desktop-left-pane.light-background .info-panel .title {
-            color: #1d2d34;
+            color: #10232a;
         }
 
         .desktop-left-pane.light-background .info-panel {
@@ -354,12 +370,13 @@
         }
 
         .desktop-left-pane.light-background .info-panel .divider {
-            background: #087c78;
+            background: #006e6b;
         }
 
         .desktop-left-pane.light-background .info-panel .desc {
-            color: #465b64;
-            font-weight: 400;
+            color: #263b44;
+            font-weight: 500;
+            text-shadow: 0 1px 1px rgba(255, 255, 255, 0.22);
         }
 
         /* 底部精致入口卡片 */
@@ -1011,7 +1028,7 @@
         // 渲染主图轮播
         function renderSwiper() {
             swiperWrapper.innerHTML = itemsData.map((item, index) => `
-                <div class="swiper-slide ${index === 0 ? 'active' : ''}" onclick="handleSlideClick(${index})">
+                <div class="swiper-slide ${index === 0 ? 'active' : ''}" style="--slide-image: url('${item.mainThumb || buildImageUrl(item.img, 960, 68)}')" onclick="handleSlideClick(${index})">
                     <img src="${item.mainThumb || buildImageUrl(item.img, 960, 68)}" alt="${item.title}" crossorigin="anonymous"
                          decoding="async" fetchpriority="${index === 0 ? 'high' : 'low'}" draggable="false" />
                 </div>

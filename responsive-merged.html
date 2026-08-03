@@ -207,13 +207,26 @@
             margin: 0 6%;
             aspect-ratio: 2 / 1;
             border-radius: 16px;
-            overflow: hidden;
+            overflow: visible;
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
             transition: transform 0.35s ease, opacity 0.35s ease, box-shadow 0.35s ease;
             opacity: 0.4;
             transform: scale(0.92);
             position: relative;
             border: 1px solid rgba(255, 255, 255, 0.05);
+            isolation: isolate;
+        }
+
+        .swiper-slide::before {
+            content: "";
+            position: absolute;
+            inset: -18px;
+            border-radius: 26px;
+            background: var(--slide-image) center / cover no-repeat;
+            filter: blur(18px) saturate(1.08);
+            opacity: 0.34;
+            z-index: 0;
+            pointer-events: none;
         }
 
         .swiper-slide.active {
@@ -227,6 +240,9 @@
             height: 100%;
             object-fit: cover;
             display: block;
+            position: relative;
+            z-index: 1;
+            border-radius: 16px;
         }
 
         .slide-hint {
@@ -324,7 +340,7 @@
 
         /* 主色较亮时切换左侧文字主题，避免浅色文字融入背景。 */
         .desktop-left-pane.light-background .header-title {
-            color: #24343b;
+            color: #18262d;
             text-shadow: 0 1px 1px rgba(255, 255, 255, 0.28);
         }
 
@@ -334,19 +350,19 @@
         }
 
         .desktop-left-pane.light-background .tab-item {
-            color: #53656d;
+            color: #2f444d;
         }
 
         .desktop-left-pane.light-background .tab-item.active {
-            color: #1d3037;
+            color: #10252c;
         }
 
         .desktop-left-pane.light-background .info-panel .letter {
-            color: #087c78;
+            color: #006e6b;
         }
 
         .desktop-left-pane.light-background .info-panel .title {
-            color: #1d2d34;
+            color: #10232a;
         }
 
         .desktop-left-pane.light-background .info-panel {
@@ -354,12 +370,13 @@
         }
 
         .desktop-left-pane.light-background .info-panel .divider {
-            background: #087c78;
+            background: #006e6b;
         }
 
         .desktop-left-pane.light-background .info-panel .desc {
-            color: #465b64;
-            font-weight: 400;
+            color: #263b44;
+            font-weight: 500;
+            text-shadow: 0 1px 1px rgba(255, 255, 255, 0.22);
         }
 
         /* 底部精致入口卡片 */
@@ -926,7 +943,11 @@
             return { galleryView: 'base' };
         }
 
+        history.scrollRestoration = 'manual';
         history.replaceState({ ...(history.state || {}), galleryView: 'base' }, '', routeUrl());
+        window.addEventListener('scroll', () => {
+            if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+        }, { passive: true });
 
         // DOM 元素
         const appContainer = document.getElementById('appContainer');
@@ -974,6 +995,7 @@
             renderPagination();
             updateState(0);
             bindSwipeEvents();
+            bindEdgeBackGesture();
             bindLightboxZoomEvents(); // 绑定大图缩放事件
 
             // 如果一开始就是大屏模式，默认直接在右侧渲染当前画册
@@ -1006,7 +1028,7 @@
         // 渲染主图轮播
         function renderSwiper() {
             swiperWrapper.innerHTML = itemsData.map((item, index) => `
-                <div class="swiper-slide ${index === 0 ? 'active' : ''}" onclick="handleSlideClick(${index})">
+                <div class="swiper-slide ${index === 0 ? 'active' : ''}" style="--slide-image: url('${item.mainThumb || buildImageUrl(item.img, 960, 68)}')" onclick="handleSlideClick(${index})">
                     <img src="${item.mainThumb || buildImageUrl(item.img, 960, 68)}" alt="${item.title}" crossorigin="anonymous"
                          decoding="async" fetchpriority="${index === 0 ? 'high' : 'low'}" draggable="false" />
                 </div>
@@ -1187,6 +1209,52 @@
             if (!isDesktopMode()) {
                 openDrawer(currentIndex);
             }
+        }
+
+        // QQ/X5 可能把屏幕左边缘右滑识别成“关闭浏览器”。有应用内页面时优先返回应用上一层。
+        function bindEdgeBackGesture() {
+            let edgeGesture = null;
+            const edgeWidth = 32;
+
+            appContainer.addEventListener('touchstart', (event) => {
+                if (isDesktopMode() || event.touches.length !== 1 || currentHistoryState().galleryView === 'base') return;
+                const touch = event.touches[0];
+                if (touch.clientX > edgeWidth) return;
+                edgeGesture = { startX: touch.clientX, startY: touch.clientY, active: false };
+            }, { capture: true, passive: false });
+
+            appContainer.addEventListener('touchmove', (event) => {
+                if (!edgeGesture || event.touches.length !== 1) return;
+                const touch = event.touches[0];
+                const deltaX = touch.clientX - edgeGesture.startX;
+                const deltaY = touch.clientY - edgeGesture.startY;
+                if (Math.abs(deltaY) > Math.abs(deltaX) + 8) {
+                    edgeGesture = null;
+                    return;
+                }
+                if (deltaX > 8) {
+                    edgeGesture.active = true;
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+            }, { capture: true, passive: false });
+
+            appContainer.addEventListener('touchend', (event) => {
+                if (!edgeGesture || !event.changedTouches.length) return;
+                const touch = event.changedTouches[0];
+                const deltaX = touch.clientX - edgeGesture.startX;
+                const deltaY = touch.clientY - edgeGesture.startY;
+                const shouldGoBack = edgeGesture.active && deltaX >= 56 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
+                edgeGesture = null;
+                if (!shouldGoBack) return;
+                event.preventDefault();
+                event.stopPropagation();
+                history.back();
+            }, { capture: true, passive: false });
+
+            appContainer.addEventListener('touchcancel', () => {
+                edgeGesture = null;
+            }, { capture: true, passive: true });
         }
 
         /* 弹窗抽屉与大屏右侧列表逻辑 */
