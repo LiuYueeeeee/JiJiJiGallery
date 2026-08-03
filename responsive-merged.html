@@ -26,7 +26,7 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            overscroll-behavior-y: none;
+            overscroll-behavior: none;
         }
 
         body {
@@ -39,7 +39,7 @@
             min-height: 100vh;
             height: 100%;
             overflow: hidden;
-            overscroll-behavior-y: none;
+            overscroll-behavior: none;
         }
 
         /* 模拟手机容器：采用静态渐变背景，色调平滑过渡，同时完美适配移动端与桌面端高度 */
@@ -207,26 +207,13 @@
             margin: 0 6%;
             aspect-ratio: 2 / 1;
             border-radius: 16px;
-            overflow: visible;
+            overflow: hidden;
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
             transition: transform 0.35s ease, opacity 0.35s ease, box-shadow 0.35s ease;
             opacity: 0.4;
             transform: scale(0.92);
             position: relative;
             border: 1px solid rgba(255, 255, 255, 0.05);
-            isolation: isolate;
-        }
-
-        .swiper-slide::before {
-            content: "";
-            position: absolute;
-            inset: -18px;
-            border-radius: 26px;
-            background: var(--slide-image) center / cover no-repeat;
-            filter: blur(18px) saturate(1.08);
-            opacity: 0.34;
-            z-index: 0;
-            pointer-events: none;
         }
 
         .swiper-slide.active {
@@ -240,8 +227,6 @@
             height: 100%;
             object-fit: cover;
             display: block;
-            position: relative;
-            z-index: 1;
             border-radius: 16px;
         }
 
@@ -513,6 +498,7 @@
         .drawer-content {
             flex: 1;
             overflow-y: auto;
+            touch-action: pan-y;
             -webkit-overflow-scrolling: touch;
             padding: 20px;
             display: flex;
@@ -995,6 +981,7 @@
             renderPagination();
             updateState(0);
             bindSwipeEvents();
+            bindVerticalSwipeGuard();
             bindEdgeBackGesture();
             bindLightboxZoomEvents(); // 绑定大图缩放事件
 
@@ -1028,7 +1015,7 @@
         // 渲染主图轮播
         function renderSwiper() {
             swiperWrapper.innerHTML = itemsData.map((item, index) => `
-                <div class="swiper-slide ${index === 0 ? 'active' : ''}" style="--slide-image: url('${item.mainThumb || buildImageUrl(item.img, 960, 68)}')" onclick="handleSlideClick(${index})">
+                <div class="swiper-slide ${index === 0 ? 'active' : ''}" onclick="handleSlideClick(${index})">
                     <img src="${item.mainThumb || buildImageUrl(item.img, 960, 68)}" alt="${item.title}" crossorigin="anonymous"
                          decoding="async" fetchpriority="${index === 0 ? 'high' : 'low'}" draggable="false" />
                 </div>
@@ -1255,6 +1242,31 @@
             appContainer.addEventListener('touchcancel', () => {
                 edgeGesture = null;
             }, { capture: true, passive: true });
+        }
+
+        // 禁止页面主体下拉唤出 QQ 工具栏，但不影响画册列表自身的纵向滚动。
+        function bindVerticalSwipeGuard() {
+            let startTouch = null;
+
+            appContainer.addEventListener('touchstart', (event) => {
+                if (event.touches.length === 1) {
+                    startTouch = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+                }
+            }, { capture: true, passive: true });
+
+            appContainer.addEventListener('touchmove', (event) => {
+                if (!startTouch || event.touches.length !== 1 || event.target.closest('.drawer-content') || event.target.closest('.lightbox-overlay')) return;
+                const deltaX = event.touches[0].clientX - startTouch.x;
+                const deltaY = event.touches[0].clientY - startTouch.y;
+                if (deltaY > 8 && Math.abs(deltaY) > Math.abs(deltaX) * 1.15) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+            }, { capture: true, passive: false });
+
+            const clearStartTouch = () => { startTouch = null; };
+            appContainer.addEventListener('touchend', clearStartTouch, { capture: true, passive: true });
+            appContainer.addEventListener('touchcancel', clearStartTouch, { capture: true, passive: true });
         }
 
         /* 弹窗抽屉与大屏右侧列表逻辑 */
