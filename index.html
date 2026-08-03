@@ -311,6 +311,46 @@
             font-weight: 300;
         }
 
+        /* 主色较亮时切换左侧文字主题，避免浅色文字融入背景。 */
+        .desktop-left-pane.light-background .header-title {
+            color: #24343b;
+            text-shadow: 0 1px 1px rgba(255, 255, 255, 0.28);
+        }
+
+        .desktop-left-pane.light-background .header-title::before,
+        .desktop-left-pane.light-background .header-title::after {
+            background: linear-gradient(90deg, transparent, rgba(36, 52, 59, 0.52), transparent);
+        }
+
+        .desktop-left-pane.light-background .tab-item {
+            color: #53656d;
+        }
+
+        .desktop-left-pane.light-background .tab-item.active {
+            color: #1d3037;
+        }
+
+        .desktop-left-pane.light-background .info-panel .letter {
+            color: #087c78;
+        }
+
+        .desktop-left-pane.light-background .info-panel .title {
+            color: #1d2d34;
+        }
+
+        .desktop-left-pane.light-background .info-panel {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.08) 100%);
+        }
+
+        .desktop-left-pane.light-background .info-panel .divider {
+            background: #087c78;
+        }
+
+        .desktop-left-pane.light-background .info-panel .desc {
+            color: #465b64;
+            font-weight: 400;
+        }
+
         /* 底部精致入口卡片 */
         .bottom-action-card {
             background: rgba(255, 255, 255, 0.03);
@@ -864,6 +904,7 @@
 
         // DOM 元素
         const appContainer = document.getElementById('appContainer');
+        const desktopLeftPane = document.querySelector('.desktop-left-pane');
         const navTabs = document.getElementById('navTabs');
         const swiperWrapper = document.getElementById('swiperWrapper');
         const pagination = document.getElementById('pagination');
@@ -999,6 +1040,10 @@
             return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
         }
 
+        function getPerceivedLuminance(color) {
+            return color[0] * 0.2126 + color[1] * 0.7152 + color[2] * 0.0722;
+        }
+
         /* 从轮播图提取主色，生成与图片同色系但适合阅读的背景。 */
         function extractColorsAndApplyBackground(imgSrc) {
             const requestId = ++backgroundRequestId;
@@ -1034,6 +1079,7 @@
 
                     if (!totalWeight) throw new Error('图片没有可用颜色');
                     average = average.map((value) => Math.round(value / totalWeight));
+                    desktopLeftPane.classList.toggle('light-background', getPerceivedLuminance(average) >= 140);
                     const palette = Array.from(bins.values()).sort((a, b) => b.weight - a.weight).slice(0, 3);
                     const dominant = palette[0]?.color || average;
                     const secondary = palette[1]?.color || average;
@@ -1046,11 +1092,13 @@
                         : `radial-gradient(circle at 50% 25%, ${colorToCss(main, 0.96)} 0%, ${colorToCss(ambient, 0.92)} 55%, ${colorToCss(accent, 0.96)} 100%)`;
                 } catch (e) {
                     if (requestId !== backgroundRequestId) return;
+                    desktopLeftPane.classList.remove('light-background');
                     appContainer.style.background = 'radial-gradient(circle at 50% 20%, #17232a 0%, #0a0f12 100%)';
                 }
             };
             img.onerror = () => {
                 if (requestId !== backgroundRequestId) return;
+                desktopLeftPane.classList.remove('light-background');
                 appContainer.style.background = 'radial-gradient(circle at 50% 20%, #17232a 0%, #0a0f12 100%)';
             };
         }
