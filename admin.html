@@ -75,12 +75,17 @@
         .gallery-head h3 { margin: 0; font-size: 15px; font-weight: 500; }
         .gallery-count { color: var(--muted); font-size: 12px; }
         .file-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
-        .file-item { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: #0c1419; overflow: hidden; }
+        .file-item { min-width: 0; position: relative; border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: #0c1419; overflow: hidden; }
         .file-thumb { width: 100%; aspect-ratio: 2 / 1; object-fit: cover; display: block; border-radius: 7px; background: #172128; margin-bottom: 8px; }
         .file-item strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 400; }
         .file-item span { display: block; color: var(--muted); font-size: 11px; margin-top: 5px; }
         .pending-file { margin: 9px 0 0; color: var(--accent) !important; }
         .draft-dot { width: 7px; height: 7px; border-radius: 50%; background: #f0bd67; box-shadow: 0 0 8px rgba(240,189,103,.45); }
+        .gallery-tools { display: flex; align-items: center; gap: 10px; }
+        .delete-toggle.active { color: #fff; background: rgba(207,62,62,.82); border-color: rgba(255,120,120,.7); }
+        .delete-cover { display: none; position: absolute; inset: 8px 8px 48px; border: 0; border-radius: 7px; background: rgba(143,15,24,.68); color: #fff; font-size: 54px; line-height: 1; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+        .file-list.delete-mode .file-item:not(.main-item) .delete-cover { display: flex; }
+        .file-list.delete-mode .file-item:not(.main-item) { border-color: rgba(255,90,90,.55); }
         .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
         .notice { border: 1px solid rgba(255,194,102,.22); background: rgba(255,194,102,.06); color: #d9c29f; border-radius: 12px; padding: 12px 14px; font-size: 12px; line-height: 1.7; margin-bottom: 18px; }
         .github-panel { margin-top: 24px; padding: 18px; border: 1px solid rgba(116,185,178,.22); border-radius: 14px; background: rgba(116,185,178,.045); }
@@ -148,17 +153,26 @@
                             <label for="descInput">正文</label>
                             <textarea id="descInput" maxlength="1000"></textarea>
                         </div>
-                        <div class="field upload-box full">
+                        <div class="field upload-box">
                             <label for="mainFile">替换主图</label>
                             <p>选择图片后将保存为 Main.jpg，同时覆盖原主图。</p>
                             <input id="mainFile" type="file" accept="image/*">
                             <p class="pending-file" id="pendingMain"></p>
                         </div>
+                        <div class="field upload-box">
+                            <label for="galleryFiles">添加画册图片</label>
+                            <p>可多选；同名文件会被覆盖，Main.jpg 请使用左侧入口替换。</p>
+                            <input id="galleryFiles" type="file" accept="image/*" multiple>
+                            <p class="pending-file" id="pendingGallery"></p>
+                        </div>
                     </div>
 
                     <div class="gallery-head">
                         <h3>文件夹中的图片</h3>
-                        <span class="gallery-count" id="galleryCount">0 张</span>
+                        <div class="gallery-tools">
+                            <span class="gallery-count" id="galleryCount">0 张</span>
+                            <button class="button delete-toggle" id="deleteToggle">进入删除模式</button>
+                        </div>
                     </div>
                     <div class="file-list" id="fileList"></div>
 
@@ -171,7 +185,7 @@
 
                     <section class="github-panel">
                         <h3>上传到 GitHub</h3>
-                        <p>将所选本地网站文件夹中的全部网页、JSON、A–F 图片及缩略图提交到指定仓库。令牌仅保留在当前页面内存中。</p>
+                        <p>将所选本地网站文件夹中的全部网页、JSON、A–F 图片及缩略图提交到指定仓库。仓库配置和令牌会保存在当前浏览器。</p>
                         <div class="github-grid">
                             <div class="field">
                                 <label for="githubOwner">GitHub 用户名或组织</label>
@@ -198,6 +212,7 @@
                             <button class="button primary" id="uploadGithub">上传并创建提交</button>
                             <span class="github-help"><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">创建访问令牌</a></span>
                         </div>
+                        <p class="github-help">用户名、仓库、分支、目录和访问令牌都会保存在当前浏览器。请仅在你信任的私人电脑上使用。</p>
                     </section>
                 </div>
             </div>
@@ -207,11 +222,13 @@
     <script>
         const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F'];
         const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp'];
+        const GITHUB_SETTINGS_KEY = 'gallery-admin-github-settings-v1';
         let rootHandle = null;
         let data = [];
         let currentGroup = 'A';
         const drafts = {};
         let previewUrls = [];
+        let deleteMode = false;
 
         const $ = (selector) => document.querySelector(selector);
         const chooseFolder = $('#chooseFolder');
@@ -222,10 +239,40 @@
         const titleInput = $('#titleInput');
         const descInput = $('#descInput');
         const mainFile = $('#mainFile');
+        const galleryFiles = $('#galleryFiles');
         const pendingMain = $('#pendingMain');
+        const pendingGallery = $('#pendingGallery');
         const fileList = $('#fileList');
         const galleryCount = $('#galleryCount');
         const status = $('#status');
+
+        function loadGithubSettings() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(GITHUB_SETTINGS_KEY) || '{}');
+                $('#githubOwner').value = saved.owner || '';
+                $('#githubRepo').value = saved.repo || '';
+                $('#githubBranch').value = saved.branch || 'main';
+                $('#githubPath').value = saved.path || '';
+                $('#githubToken').value = saved.token || '';
+            } catch (_) {
+                localStorage.removeItem(GITHUB_SETTINGS_KEY);
+            }
+        }
+
+        function saveGithubSettings() {
+            localStorage.setItem(GITHUB_SETTINGS_KEY, JSON.stringify({
+                owner: $('#githubOwner').value.trim(),
+                repo: $('#githubRepo').value.trim(),
+                branch: $('#githubBranch').value.trim() || 'main',
+                path: $('#githubPath').value.trim(),
+                token: $('#githubToken').value.trim()
+            }));
+        }
+
+        ['githubOwner', 'githubRepo', 'githubBranch', 'githubPath', 'githubToken'].forEach((id) => {
+            $(`#${id}`).addEventListener('input', saveGithubSettings);
+        });
+        loadGithubSettings();
 
         function setStatus(message, type = '') {
             status.textContent = message;
@@ -248,12 +295,14 @@
             if (!item) return;
             const existing = drafts[id];
             const selectedMain = mainFile.files[0] || existing?.mainFile || null;
+            const selectedGallery = galleryFiles.files.length ? Array.from(galleryFiles.files) : (existing?.galleryFiles || []);
             const draft = {
                 title: titleInput.value,
                 desc: descInput.value,
-                mainFile: selectedMain
+                mainFile: selectedMain,
+                galleryFiles: selectedGallery
             };
-            const changed = draft.title !== (item.title || '') || draft.desc !== (item.desc || '') || !!draft.mainFile;
+            const changed = draft.title !== (item.title || '') || draft.desc !== (item.desc || '') || !!draft.mainFile || draft.galleryFiles.length > 0;
             if (changed) drafts[id] = draft;
             else delete drafts[id];
         }
@@ -319,7 +368,10 @@
             titleInput.value = draft?.title ?? item?.title ?? '';
             descInput.value = draft?.desc ?? item?.desc ?? '';
             mainFile.value = '';
+            galleryFiles.value = '';
             pendingMain.textContent = draft?.mainFile ? `待上传：${draft.mainFile.name}` : '';
+            pendingGallery.textContent = draft?.galleryFiles?.length ? `待添加：${draft.galleryFiles.length} 张` : '';
+            setDeleteMode(false);
             setStatus('');
 
             const images = await listImages(currentGroup);
@@ -348,18 +400,52 @@
                 const previewUrl = URL.createObjectURL(previewFile);
                 previewUrls.push(previewUrl);
                 const card = document.createElement('div');
-                card.className = 'file-item';
+                const isMain = image.name.toLowerCase() === 'main.jpg';
+                card.className = `file-item ${isMain ? 'main-item' : ''}`;
                 card.innerHTML = `
                     <img class="file-thumb" src="${previewUrl}" alt="${escapeHtml(image.name)}">
                     <strong title="${escapeHtml(image.name)}">${escapeHtml(image.name)}</strong>
-                    <span>${image.name.toLowerCase() === 'main.jpg' ? '轮播主图 / 画册首图' : '画册图片'}</span>
+                    <span>${isMain ? '轮播主图 / 画册首图（不可删除）' : '画册图片'}</span>
+                    ${isMain ? '' : `<button class="delete-cover" type="button" aria-label="删除 ${escapeHtml(image.name)}">&times;</button>`}
                 `;
+                if (!isMain) card.querySelector('.delete-cover').addEventListener('click', () => deleteGalleryImage(image.name));
                 fileList.appendChild(card);
             }
         }
 
         function escapeHtml(value) {
             return value.replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[char]));
+        }
+
+        function setDeleteMode(enabled) {
+            deleteMode = enabled;
+            fileList.classList.toggle('delete-mode', enabled);
+            const button = $('#deleteToggle');
+            button.classList.toggle('active', enabled);
+            button.textContent = enabled ? '退出删除模式' : '进入删除模式';
+        }
+
+        async function deleteGalleryImage(name) {
+            if (!deleteMode || name.toLowerCase() === 'main.jpg') return;
+            if (!confirm(`确定删除 ${currentGroup}/${name}？此操作会删除本地图片和对应缩略图。`)) return;
+            setBusy(true);
+            setStatus(`正在删除 ${name}…`);
+            try {
+                const directory = await getGroupDirectory(currentGroup);
+                await directory.removeEntry(name);
+                try {
+                    const thumbDirectory = await directory.getDirectoryHandle('_thumbs');
+                    await thumbDirectory.removeEntry(`${name}.jpg`);
+                } catch (_) {}
+                await rebuildGroup(currentGroup);
+                await writeJson();
+                await loadGroup();
+                setStatus(`${name} 已删除。上传到 GitHub 后远程文件也会同步删除。`, 'success');
+            } catch (error) {
+                setStatus(`删除失败：${error.message}`, 'error');
+            } finally {
+                setBusy(false);
+            }
         }
 
         async function writeFile(directory, name, file) {
@@ -453,6 +539,17 @@
                 });
             }
 
+            // 同步删除 A-F 中本地已经移除的远程图片与缩略图，其他仓库文件不受影响。
+            const remoteTree = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/trees/${commit.tree.sha}?recursive=1`, token);
+            const localPaths = new Set(treeItems.map((item) => item.path));
+            const managedPrefixes = GROUPS.map((id) => pathPrefix ? `${pathPrefix}/${id}/` : `${id}/`);
+            for (const remoteItem of remoteTree.tree || []) {
+                const managed = remoteItem.type === 'blob' && managedPrefixes.some((prefix) => remoteItem.path.startsWith(prefix));
+                if (managed && !localPaths.has(remoteItem.path)) {
+                    treeItems.push({ path: remoteItem.path, mode: '100644', type: 'blob', sha: null });
+                }
+            }
+
             setStatus('正在创建 GitHub 提交…');
             const tree = await githubRequest(`/repos/${encodedOwner}/${encodedRepo}/git/trees`, token, {
                 method: 'POST',
@@ -473,9 +570,13 @@
             return true;
         }
 
-        async function uploadSelectedFiles(pendingMainFile) {
+        async function uploadSelectedFiles(pendingMainFile, pendingGalleryFiles = []) {
             const directory = await getGroupDirectory(currentGroup);
             if (pendingMainFile) await writeFile(directory, 'Main.jpg', pendingMainFile);
+            for (const file of pendingGalleryFiles) {
+                if (file.name.toLowerCase() === 'main.jpg') continue;
+                await writeFile(directory, file.name, file);
+            }
         }
 
         async function createThumbnail(file, maxWidth, quality) {
@@ -545,6 +646,14 @@
             renderTabs();
         });
 
+        galleryFiles.addEventListener('change', () => {
+            saveDraft(currentGroup);
+            pendingGallery.textContent = drafts[currentGroup]?.galleryFiles?.length ? `待添加：${drafts[currentGroup].galleryFiles.length} 张` : '';
+            renderTabs();
+        });
+
+        $('#deleteToggle').addEventListener('click', () => setDeleteMode(!deleteMode));
+
         $('#reloadGroup').addEventListener('click', async () => {
             if (drafts[currentGroup] && !confirm(`将放弃 ${currentGroup} 组尚未保存的修改，是否继续？`)) return;
             delete drafts[currentGroup];
@@ -558,10 +667,10 @@
             try {
                 const item = currentItem();
                 saveDraft(currentGroup);
-                const draft = drafts[currentGroup] || { title: titleInput.value, desc: descInput.value, mainFile: null };
+                const draft = drafts[currentGroup] || { title: titleInput.value, desc: descInput.value, mainFile: null, galleryFiles: [] };
                 item.title = draft.title.trim();
                 item.desc = draft.desc.trim();
-                await uploadSelectedFiles(draft.mainFile);
+                await uploadSelectedFiles(draft.mainFile, draft.galleryFiles);
                 await rebuildGroup(currentGroup);
                 await writeJson();
                 delete drafts[currentGroup];
