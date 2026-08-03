@@ -3,69 +3,78 @@
     "id": "A",
     "title": "山水行舟图",
     "desc": "青山隐隐水迢迢，舟行碧波上，远岸炊烟起，心随景远，意境悠长。",
-    "img": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&h=400&q=80",
+    "img": "A/Main.jpg",
+    "mainThumb": "A/_thumbs/Main.jpg",
     "gallery": [
-      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1511884642898-4c92249e20b6?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1439853949127-fa647821eba0?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1200&h=600&q=80"
+      "A/Main.jpg"
+    ],
+    "thumbnails": [
+      "A/_thumbs/Main.jpg"
     ]
   },
   {
     "id": "B",
     "title": "松林听风图",
     "desc": "寒山松柏苍翠，风过林海涛声阵阵，静坐石上，洗尽尘世铅华。",
-    "img": "https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=800&h=400&q=80",
+    "img": "B/Main.jpg",
+    "mainThumb": "B/_thumbs/Main.jpg",
     "gallery": [
-      "https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&h=600&q=80"
+      "B/Main.jpg"
+    ],
+    "thumbnails": [
+      "B/_thumbs/Main.jpg"
     ]
   },
   {
     "id": "C",
     "title": "云海观日图",
     "desc": "云雾缭绕千峰秀，日出东方万道红，翻涌如海，壮丽辉煌。",
-    "img": "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&h=400&q=80",
+    "img": "C/Main.jpg",
+    "mainThumb": "C/_thumbs/Main.jpg",
     "gallery": [
-      "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?auto=format&fit=crop&w=1200&h=600&q=80"
+      "C/Main.jpg"
+    ],
+    "thumbnails": [
+      "C/_thumbs/Main.jpg"
     ]
   },
   {
     "id": "D",
     "title": "江雪独钓图",
     "desc": "千山鸟飞绝，万径人踪灭。孤舟蓑笠翁，独钓寒江雪。",
-    "img": "https://images.unsplash.com/photo-1491555103944-7c647fd857e6?auto=format&fit=crop&w=800&h=400&q=80",
+    "img": "D/Main.jpg",
+    "mainThumb": "D/_thumbs/Main.jpg",
     "gallery": [
-      "https://images.unsplash.com/photo-1491555103944-7c647fd857e6?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1486496146582-9ffcd0b2b2b7?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?auto=format&fit=crop&w=1200&h=600&q=80"
+      "D/Main.jpg"
+    ],
+    "thumbnails": [
+      "D/_thumbs/Main.jpg"
     ]
   },
   {
     "id": "E",
     "title": "秋水长天图",
     "desc": "落霞与孤鹜齐飞，秋水共长天一色。晚霞映照，水波潋滟。",
-    "img": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&h=400&q=80",
+    "img": "E/Main.jpg",
+    "mainThumb": "E/_thumbs/Main.jpg",
     "gallery": [
-      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1200&h=600&q=80"
+      "E/Main.jpg"
+    ],
+    "thumbnails": [
+      "E/_thumbs/Main.jpg"
     ]
   },
   {
     "id": "F",
     "title": "竹林栖隐图",
     "desc": "独坐幽篁里，弹琴复长啸。深林人不知，明月来相照。",
-    "img": "https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=800&h=400&q=80",
+    "img": "F/Main.jpg",
+    "mainThumb": "F/_thumbs/Main.jpg",
     "gallery": [
-      "https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?auto=format&fit=crop&w=1200&h=600&q=80",
-      "https://images.unsplash.com/photo-1503614472-8c93d56e92ce?auto=format&fit=crop&w=1200&h=600&q=80"
+      "F/Main.jpg"
+    ],
+    "thumbnails": [
+      "F/_thumbs/Main.jpg"
     ]
   }
 ]
