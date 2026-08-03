@@ -127,7 +127,7 @@
         </header>
 
         <div class="notice">
-            请选择包含 index.html 与 gallery-data.json 的本地网站文件夹。修改会写入本地文件；完成后仍需将变更推送或上传到 GitHub。
+            请选择本地网站文件夹；如果文件夹为空，也可以先连接后使用“从云端恢复”。修改会写入本地文件；完成后仍需将变更推送或上传到 GitHub。
         </div>
 
         <section class="panel empty" id="welcome">
@@ -350,10 +350,28 @@
             else delete drafts[id];
         }
 
+        function createDefaultData() {
+            return GROUPS.map((id) => ({
+                id,
+                title: '',
+                desc: '',
+                img: `${id}/Main.jpg`,
+                gallery: [`${id}/Main.jpg`]
+            }));
+        }
+
         async function readJson() {
-            const handle = await rootHandle.getFileHandle('gallery-data.json');
-            const file = await handle.getFile();
-            data = JSON.parse(await file.text());
+            try {
+                const handle = await rootHandle.getFileHandle('gallery-data.json');
+                const file = await handle.getFile();
+                data = JSON.parse(await file.text());
+            } catch (error) {
+                if (error.name !== 'NotFoundError') throw error;
+                // 空文件夹也允许先连接，以便使用 GitHub 恢复功能。
+                data = createDefaultData();
+                return;
+            }
+            if (!Array.isArray(data)) throw new Error('gallery-data.json 必须是数组');
             for (const id of GROUPS) {
                 if (!data.some((item) => item.id === id)) {
                     data.push({ id, title: '', desc: '', img: `${id}/Main.jpg`, gallery: [`${id}/Main.jpg`] });
