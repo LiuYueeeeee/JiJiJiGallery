@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>七安-客单展示</title>
+    <title>客单展示</title>
     <style>
         * {
             box-sizing: border-box;
@@ -36,6 +36,36 @@
             box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
             overflow: hidden;
             transition: background 0.8s ease;
+        }
+
+        /* 枫叶飘落特效：独立覆盖层，不参与布局也不拦截任何操作 */
+        .maple-leaves {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .maple-leaf {
+            position: absolute;
+            top: -15vh;
+            left: var(--x);
+            font-size: var(--size);
+            opacity: var(--opacity);
+            filter: drop-shadow(0 3px 4px rgba(45, 8, 4, 0.28));
+            animation: maple-fall var(--duration) linear var(--delay) infinite;
+            will-change: transform;
+        }
+
+        @keyframes maple-fall {
+            0% { transform: translate3d(0, -12vh, 0) rotate(0deg); }
+            45% { transform: translate3d(calc(var(--drift) * -0.35), 48vh, 0) rotate(calc(var(--spin) * 0.45)); }
+            100% { transform: translate3d(var(--drift), 116vh, 0) rotate(var(--spin)); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .maple-leaves { display: none; }
         }
 
         /* 1. 顶部 Header (利用安全距离与额外边距向下移动，完美避开手机灵动岛/刘海屏，兼顾桌面端) */
@@ -469,7 +499,7 @@
         }
 
         .lightbox-overlay.is-loading::after {
-            content: "高清图片加载中…";
+            content: attr(data-progress);
             position: absolute;
             left: 50%;
             bottom: 28px;
@@ -681,11 +711,25 @@
 <body>
 
     <div class="app-container" id="appContainer">
+        <div class="maple-leaves" aria-hidden="true">
+            <span class="maple-leaf" style="--x:4%;--size:18px;--opacity:.46;--duration:12s;--delay:-3s;--drift:80px;--spin:620deg">🍁</span>
+            <span class="maple-leaf" style="--x:12%;--size:26px;--opacity:.72;--duration:16s;--delay:-11s;--drift:-64px;--spin:-760deg">🍁</span>
+            <span class="maple-leaf" style="--x:23%;--size:15px;--opacity:.38;--duration:11s;--delay:-7s;--drift:54px;--spin:540deg">🍁</span>
+            <span class="maple-leaf" style="--x:34%;--size:22px;--opacity:.58;--duration:15s;--delay:-1s;--drift:-92px;--spin:-680deg">🍁</span>
+            <span class="maple-leaf" style="--x:46%;--size:17px;--opacity:.44;--duration:13s;--delay:-9s;--drift:70px;--spin:720deg">🍁</span>
+            <span class="maple-leaf" style="--x:57%;--size:29px;--opacity:.68;--duration:18s;--delay:-14s;--drift:-78px;--spin:-820deg">🍁</span>
+            <span class="maple-leaf" style="--x:66%;--size:14px;--opacity:.36;--duration:10s;--delay:-5s;--drift:48px;--spin:510deg">🍁</span>
+            <span class="maple-leaf" style="--x:74%;--size:23px;--opacity:.61;--duration:14s;--delay:-12s;--drift:-58px;--spin:-650deg">🍁</span>
+            <span class="maple-leaf" style="--x:83%;--size:19px;--opacity:.49;--duration:12s;--delay:-8s;--drift:86px;--spin:690deg">🍁</span>
+            <span class="maple-leaf" style="--x:92%;--size:27px;--opacity:.66;--duration:17s;--delay:-4s;--drift:-72px;--spin:-780deg">🍁</span>
+            <span class="maple-leaf" style="--x:39%;--size:13px;--opacity:.33;--duration:9s;--delay:-6s;--drift:42px;--spin:480deg">🍁</span>
+            <span class="maple-leaf" style="--x:69%;--size:20px;--opacity:.52;--duration:13s;--delay:-2s;--drift:-84px;--spin:-610deg">🍁</span>
+        </div>
         <!-- 适配PC端横屏的左侧面板 -->
         <div class="desktop-left-pane">
             <!-- 顶部标题栏 -->
             <div class="header">
-                <div class="header-title">客单图片展示</div>
+                <div class="header-title">客单展示</div>
             </div>
 
             <!-- A-F 导航标签 -->
@@ -756,6 +800,8 @@
         let currentIndex = 0;
         let currentScale = 1; // 记录当前缩放倍数
         let lightboxRequestId = 0;
+        let lightboxBlobUrl = null;
+        let lightboxAbortController = null;
 
         // DOM 元素
         const appContainer = document.getElementById('appContainer');
@@ -1045,6 +1091,33 @@
         }
 
         /* 放大预览 Lightbox 逻辑及鼠标滚动整体容器缩放 */
+        async function fetchImageWithProgress(url, requestId, signal) {
+            const response = await fetch(url, { signal });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const total = Number(response.headers.get('content-length')) || 0;
+            if (!response.body) {
+                const blob = await response.blob();
+                lightboxOverlay.dataset.progress = '高清图片加载中 100%';
+                return blob;
+            }
+
+            const reader = response.body.getReader();
+            const chunks = [];
+            let loaded = 0;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                loaded += value.byteLength;
+                if (requestId === lightboxRequestId) {
+                    const percent = total ? Math.min(99, Math.round(loaded / total * 100)) : 0;
+                    lightboxOverlay.dataset.progress = `高清图片加载中 ${percent}%`;
+                }
+            }
+            lightboxOverlay.dataset.progress = '高清图片加载中 100%';
+            return new Blob(chunks, { type: response.headers.get('content-type') || 'image/jpeg' });
+        }
+
         async function openLightbox(itemIndex, galleryIndex) {
             const source = itemsData[itemIndex].gallery[galleryIndex];
             const requestId = ++lightboxRequestId;
@@ -1057,18 +1130,35 @@
             lightboxImg.alt = `${itemsData[itemIndex].title} ${galleryIndex + 1}`;
             lightboxOverlay.classList.add('open');
             lightboxOverlay.classList.add('is-loading');
+            lightboxOverlay.dataset.progress = '高清图片加载中 0%';
             currentScale = 1; // 重置缩放比例
             updateLightboxTransform();
 
-            const fullImage = new Image();
-            fullImage.decoding = 'async';
-            fullImage.src = fullUrl;
+            if (lightboxAbortController) lightboxAbortController.abort();
+            lightboxAbortController = new AbortController();
             try {
-                await fullImage.decode();
+                const blob = await fetchImageWithProgress(fullUrl, requestId, lightboxAbortController.signal);
                 if (requestId !== lightboxRequestId || !lightboxOverlay.classList.contains('open')) return;
-                lightboxImg.src = fullUrl;
+                if (lightboxBlobUrl) URL.revokeObjectURL(lightboxBlobUrl);
+                lightboxBlobUrl = URL.createObjectURL(blob);
+                lightboxImg.src = lightboxBlobUrl;
+                try { await lightboxImg.decode(); } catch (_) {}
             } catch (error) {
-                console.warn('高清图片加载失败，继续使用预览图：', error);
+                if (error.name !== 'AbortError') {
+                    console.warn('流式加载失败，尝试普通图片加载：', error);
+                    const fallbackImage = new Image();
+                    fallbackImage.decoding = 'async';
+                    fallbackImage.src = fullUrl;
+                    try {
+                        await fallbackImage.decode();
+                        if (requestId === lightboxRequestId && lightboxOverlay.classList.contains('open')) {
+                            lightboxOverlay.dataset.progress = '高清图片加载中 100%';
+                            lightboxImg.src = fullUrl;
+                        }
+                    } catch (fallbackError) {
+                        console.warn('高清图片加载失败，继续使用预览图：', fallbackError);
+                    }
+                }
             } finally {
                 if (requestId === lightboxRequestId) lightboxOverlay.classList.remove('is-loading');
             }
@@ -1076,8 +1166,15 @@
 
         function closeLightboxFunc() {
             lightboxRequestId++;
+            if (lightboxAbortController) lightboxAbortController.abort();
+            lightboxAbortController = null;
             lightboxOverlay.classList.remove('open');
             lightboxOverlay.classList.remove('is-loading');
+            delete lightboxOverlay.dataset.progress;
+            if (lightboxBlobUrl) {
+                URL.revokeObjectURL(lightboxBlobUrl);
+                lightboxBlobUrl = null;
+            }
         }
 
         function updateLightboxTransform() {
