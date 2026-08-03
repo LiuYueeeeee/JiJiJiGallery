@@ -787,6 +787,19 @@
             if (!main) throw new Error(`${id}/Main.jpg 不存在`);
 
             const thumbDirectory = await directory.getDirectoryHandle('_thumbs', { create: true });
+            const expectedThumbs = new Set(images.map((image) =>
+                image.name.toLowerCase() === 'main.jpg' ? 'Main.jpg' : `${image.name}.jpg`
+            ));
+
+            // 先清理已经没有对应原图、图片已改名或其他遗留的无用缩略图。
+            const staleEntries = [];
+            for await (const [name, handle] of thumbDirectory.entries()) {
+                if (!expectedThumbs.has(name)) staleEntries.push({ name, isDirectory: handle.kind === 'directory' });
+            }
+            for (const entry of staleEntries) {
+                await thumbDirectory.removeEntry(entry.name, { recursive: entry.isDirectory });
+            }
+
             const gallery = [];
             const thumbnails = [];
 
