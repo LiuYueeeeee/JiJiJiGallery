@@ -52,7 +52,7 @@
         .group-tab b { font-family: Georgia, serif; color: var(--accent); font-size: 18px; }
         .panel { padding: 24px; min-height: 570px; }
         .empty { min-height: 480px; display: grid; place-items: center; color: var(--muted); text-align: center; line-height: 1.8; }
-        .editor[hidden], .workspace[hidden] { display: none; }
+        [hidden], .empty[hidden], .editor[hidden], .workspace[hidden] { display: none !important; }
         .editor-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
         .editor-head h2 { margin: 0; font-size: 20px; font-weight: 500; }
         .status { min-height: 20px; color: var(--muted); font-size: 13px; margin: 12px 0; }
@@ -75,9 +75,12 @@
         .gallery-head h3 { margin: 0; font-size: 15px; font-weight: 500; }
         .gallery-count { color: var(--muted); font-size: 12px; }
         .file-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
-        .file-item { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #0c1419; }
+        .file-item { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: #0c1419; overflow: hidden; }
+        .file-thumb { width: 100%; aspect-ratio: 2 / 1; object-fit: cover; display: block; border-radius: 7px; background: #172128; margin-bottom: 8px; }
         .file-item strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 400; }
         .file-item span { display: block; color: var(--muted); font-size: 11px; margin-top: 5px; }
+        .pending-file { margin: 9px 0 0; color: var(--accent) !important; }
+        .draft-dot { width: 7px; height: 7px; border-radius: 50%; background: #f0bd67; box-shadow: 0 0 8px rgba(240,189,103,.45); }
         .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
         .notice { border: 1px solid rgba(255,194,102,.22); background: rgba(255,194,102,.06); color: #d9c29f; border-radius: 12px; padding: 12px 14px; font-size: 12px; line-height: 1.7; margin-bottom: 18px; }
         .github-panel { margin-top: 24px; padding: 18px; border: 1px solid rgba(116,185,178,.22); border-radius: 14px; background: rgba(116,185,178,.045); }
@@ -145,15 +148,11 @@
                             <label for="descInput">正文</label>
                             <textarea id="descInput" maxlength="1000"></textarea>
                         </div>
-                        <div class="field upload-box">
+                        <div class="field upload-box full">
                             <label for="mainFile">替换主图</label>
                             <p>选择图片后将保存为 Main.jpg，同时覆盖原主图。</p>
                             <input id="mainFile" type="file" accept="image/*">
-                        </div>
-                        <div class="field upload-box">
-                            <label for="galleryFiles">添加画册图片</label>
-                            <p>可多选；同名文件会被覆盖，Main.jpg 请使用左侧入口替换。</p>
-                            <input id="galleryFiles" type="file" accept="image/*" multiple>
+                            <p class="pending-file" id="pendingMain"></p>
                         </div>
                     </div>
 
@@ -211,6 +210,8 @@
         let rootHandle = null;
         let data = [];
         let currentGroup = 'A';
+        const drafts = {};
+        let previewUrls = [];
 
         const $ = (selector) => document.querySelector(selector);
         const chooseFolder = $('#chooseFolder');
@@ -221,7 +222,7 @@
         const titleInput = $('#titleInput');
         const descInput = $('#descInput');
         const mainFile = $('#mainFile');
-        const galleryFiles = $('#galleryFiles');
+        const pendingMain = $('#pendingMain');
         const fileList = $('#fileList');
         const galleryCount = $('#galleryCount');
         const status = $('#status');
@@ -240,6 +241,21 @@
 
         function currentItem() {
             return data.find((item) => item.id === currentGroup);
+        }
+
+        function saveDraft(id) {
+            const item = data.find((entry) => entry.id === id);
+            if (!item) return;
+            const existing = drafts[id];
+            const selectedMain = mainFile.files[0] || existing?.mainFile || null;
+            const draft = {
+                title: titleInput.value,
+                desc: descInput.value,
+                mainFile: selectedMain
+            };
+            const changed = draft.title !== (item.title || '') || draft.desc !== (item.desc || '') || !!draft.mainFile;
+            if (changed) drafts[id] = draft;
+            else delete drafts[id];
         }
 
         async function readJson() {
@@ -264,10 +280,12 @@
             groupTabs.innerHTML = GROUPS.map((id) => `
                 <button class="group-tab ${id === currentGroup ? 'active' : ''}" data-group="${id}">
                     <b>${id}</b><span>${data.find((item) => item.id === id)?.title || '未命名'}</span>
+                    ${drafts[id] ? '<i class="draft-dot" title="有未保存修改"></i>' : ''}
                 </button>
             `).join('');
             groupTabs.querySelectorAll('.group-tab').forEach((button) => {
                 button.addEventListener('click', async () => {
+                    saveDraft(currentGroup);
                     currentGroup = button.dataset.group;
                     renderTabs();
                     await loadGroup();
@@ -296,21 +314,48 @@
 
         async function loadGroup() {
             const item = currentItem();
+            const draft = drafts[currentGroup];
             groupId.textContent = currentGroup;
-            titleInput.value = item?.title || '';
-            descInput.value = item?.desc || '';
+            titleInput.value = draft?.title ?? item?.title ?? '';
+            descInput.value = draft?.desc ?? item?.desc ?? '';
             mainFile.value = '';
-            galleryFiles.value = '';
+            pendingMain.textContent = draft?.mainFile ? `待上传：${draft.mainFile.name}` : '';
             setStatus('');
 
             const images = await listImages(currentGroup);
             galleryCount.textContent = `${images.length} 张`;
-            fileList.innerHTML = images.length ? images.map(({ name }) => `
-                <div class="file-item">
-                    <strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
-                    <span>${name.toLowerCase() === 'main.jpg' ? '轮播主图 / 画册首图' : '画册图片'}</span>
-                </div>
-            `).join('') : '<div class="file-item"><strong>暂无图片</strong><span>请先上传 Main.jpg</span></div>';
+            previewUrls.forEach((url) => URL.revokeObjectURL(url));
+            previewUrls = [];
+            fileList.innerHTML = '';
+            if (!images.length) {
+                fileList.innerHTML = '<div class="file-item"><strong>暂无图片</strong><span>请先上传 Main.jpg</span></div>';
+                return;
+            }
+            let thumbDirectory = null;
+            try {
+                const directory = await getGroupDirectory(currentGroup);
+                thumbDirectory = await directory.getDirectoryHandle('_thumbs');
+            } catch (_) {}
+            for (const image of images) {
+                let previewFile = await image.handle.getFile();
+                if (thumbDirectory) {
+                    const thumbName = image.name.toLowerCase() === 'main.jpg' ? 'Main.jpg' : `${image.name}.jpg`;
+                    try {
+                        const thumbHandle = await thumbDirectory.getFileHandle(thumbName);
+                        previewFile = await thumbHandle.getFile();
+                    } catch (_) {}
+                }
+                const previewUrl = URL.createObjectURL(previewFile);
+                previewUrls.push(previewUrl);
+                const card = document.createElement('div');
+                card.className = 'file-item';
+                card.innerHTML = `
+                    <img class="file-thumb" src="${previewUrl}" alt="${escapeHtml(image.name)}">
+                    <strong title="${escapeHtml(image.name)}">${escapeHtml(image.name)}</strong>
+                    <span>${image.name.toLowerCase() === 'main.jpg' ? '轮播主图 / 画册首图' : '画册图片'}</span>
+                `;
+                fileList.appendChild(card);
+            }
         }
 
         function escapeHtml(value) {
@@ -371,6 +416,8 @@
 
         async function uploadDirectoryToGithub() {
             if (!rootHandle) throw new Error('请先选择本地网站文件夹');
+            saveDraft(currentGroup);
+            if (Object.keys(drafts).length) throw new Error('仍有未保存的 A–F 内容修改，请先分别保存后再上传 GitHub');
             const owner = $('#githubOwner').value.trim();
             const repo = $('#githubRepo').value.trim();
             const branch = $('#githubBranch').value.trim() || 'main';
@@ -426,13 +473,9 @@
             return true;
         }
 
-        async function uploadSelectedFiles() {
+        async function uploadSelectedFiles(pendingMainFile) {
             const directory = await getGroupDirectory(currentGroup);
-            if (mainFile.files[0]) await writeFile(directory, 'Main.jpg', mainFile.files[0]);
-            for (const file of galleryFiles.files) {
-                if (file.name.toLowerCase() === 'main.jpg') continue;
-                await writeFile(directory, file.name, file);
-            }
+            if (pendingMainFile) await writeFile(directory, 'Main.jpg', pendingMainFile);
         }
 
         async function createThumbnail(file, maxWidth, quality) {
@@ -496,18 +539,32 @@
             }
         });
 
-        $('#reloadGroup').addEventListener('click', loadGroup);
+        mainFile.addEventListener('change', () => {
+            saveDraft(currentGroup);
+            pendingMain.textContent = drafts[currentGroup]?.mainFile ? `待上传：${drafts[currentGroup].mainFile.name}` : '';
+            renderTabs();
+        });
+
+        $('#reloadGroup').addEventListener('click', async () => {
+            if (drafts[currentGroup] && !confirm(`将放弃 ${currentGroup} 组尚未保存的修改，是否继续？`)) return;
+            delete drafts[currentGroup];
+            renderTabs();
+            await loadGroup();
+        });
 
         $('#saveCurrent').addEventListener('click', async () => {
             setBusy(true);
             setStatus('正在保存并处理图片…');
             try {
                 const item = currentItem();
-                item.title = titleInput.value.trim();
-                item.desc = descInput.value.trim();
-                await uploadSelectedFiles();
+                saveDraft(currentGroup);
+                const draft = drafts[currentGroup] || { title: titleInput.value, desc: descInput.value, mainFile: null };
+                item.title = draft.title.trim();
+                item.desc = draft.desc.trim();
+                await uploadSelectedFiles(draft.mainFile);
                 await rebuildGroup(currentGroup);
                 await writeJson();
+                delete drafts[currentGroup];
                 renderTabs();
                 await loadGroup();
                 setStatus('保存成功。请将本地变更推送到 GitHub。', 'success');
